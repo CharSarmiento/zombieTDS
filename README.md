@@ -21,7 +21,9 @@ npm run dev        # http://localhost:5173
 | `npm run dev` | Development server |
 | `npm run build` | Type-check + production build into `dist/` |
 
-## Controls (planned)
+Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; F1 shows hitboxes in game; F9 on character select opens the animation preview.
+
+## Controls
 
 | Action | Keyboard / mouse | Gamepad |
 |---|---|---|
@@ -29,7 +31,7 @@ npm run dev        # http://localhost:5173
 | Aim | Mouse | Right stick |
 | Shoot / attack | Left click | RT |
 | Reload | R | X |
-| Switch weapon | 1–5 / wheel | LB / RB |
+| Switch weapon | 1–5 / wheel / Q–E | LB / RB |
 | Sprint | Shift | L3 |
 | Pause | Esc | Start |
 
@@ -37,7 +39,7 @@ npm run dev        # http://localhost:5173
 
 - [x] M0 · Project setup
 - [x] M1 · Asset pipeline (atlases, pivots, muzzle-flash cleanup, preview scene)
-- [ ] M2 · Player: movement, aiming, camera, keyboard/mouse + gamepad
+- [x] M2 · Player: movement, aiming, camera, keyboard/mouse + gamepad
 - [ ] M3 · Weapons: knife, pistol, bat, rifle, flamethrower
 - [ ] M4 · Zombies (tiers 1–2), flow-field AI
 - [ ] M5 · Levels (Tiled maps, walls, cover, explosive barrels)

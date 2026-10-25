@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { MANIFEST_KEY } from '../assets/manifest';
+import { loadFonts } from '../ui/fonts';
 
 /** Loads only the asset manifest, then hands over to the Preload scene. */
 export class BootScene extends Phaser.Scene {
@@ -16,6 +17,6 @@ export class BootScene extends Phaser.Scene {
       this.add.text(40, 40, 'Falta public/atlases/manifest.json\nEjecuta: npm run assets', { fontSize: '32px', color: '#ff6060' });
       return;
     }
-    this.scene.start('Preload');
+    loadFonts().then(() => this.scene.start('Preload'));
   }
 }

@@ -41,7 +41,9 @@ export class PreloadScene extends Phaser.Scene {
         repeat: s.repeat,
       });
     }
-    // Until the main menu exists (M7), the asset preview is the entry point.
-    this.scene.start('AnimPreview');
+    // The main menu arrives in M7; until then the game starts at character select.
+    // Dev shortcut: ?scene=Game (or any scene key) jumps straight there.
+    const jump = import.meta.env.DEV ? new URLSearchParams(location.search).get('scene') : null;
+    this.scene.start(jump && this.scene.get(jump) ? jump : 'CharacterSelect');
   }
 }
