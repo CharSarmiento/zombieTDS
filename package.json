@@ -1,0 +1,22 @@
+{
+  "name": "zombies-game",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "assets": "node tools/build-assets.mjs"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "maxrects-packer": "^3.0.0",
+    "sharp": "^0.35.5",
+    "typescript": "5.9",
+    "vite": "^8.3.5"
+  }
+}

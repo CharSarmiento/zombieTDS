@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.cache/
+*.log
+.DS_Store
+Thumbs.db
+
+# Licensed third-party material (CraftPix pack, Viking Squad font): never published.
+# See assets/README.md for how to set it up locally.
+assets/*
+!assets/README.md
+
+# Generated from the licensed material by `npm run assets`
+public/atlases/
+public/images/
+public/tilesets/
+public/fonts/
+public/favicon.png
