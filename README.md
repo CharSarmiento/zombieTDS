@@ -21,7 +21,7 @@ npm run dev        # http://localhost:5173
 | `npm run dev` | Development server |
 | `npm run build` | Type-check + production build into `dist/` |
 
-Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; `&demo=rifle` (any weapon id) makes the player invulnerable and auto-fires at the nearest zombie; `&horde=60` spawns that many zombies at once; in game F1 shows hitboxes, F2 refills ammo and F3 spawns 10 zombies; F9 on character select opens the animation preview.
+Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; `&demo=rifle` (any weapon id) makes the player invulnerable and auto-fires at the nearest zombie; `&horde=60` spawns that many zombies at once; `&god=1` makes the player invulnerable; in game F1 shows hitboxes, F2 refills ammo and F3 spawns 10 zombies; F9 on character select opens the animation preview.
 
 ## Controls
 

@@ -7,6 +7,7 @@ import { WEAPON_ORDER, WEAPONS, type WeaponId } from '../data/weapons';
 import { DEPTH } from '../entities/Actor';
 import { Player } from '../entities/Player';
 import { Zombie, type ZombieContext } from '../entities/Zombie';
+import { Crowd } from '../systems/Crowd';
 import { FlowField } from '../systems/FlowField';
 import { Fx } from '../systems/Fx';
 import { InputManager, type InputFrame } from '../systems/InputManager';
@@ -34,6 +35,7 @@ export class GameScene extends Phaser.Scene {
   private projectiles!: Projectiles;
   private weapons!: WeaponSystem;
   private field!: FlowField;
+  private crowd!: Crowd<Zombie>;
   private spawner!: TestSpawner;
   private zombies: Zombie[] = [];
   private zombieGroup!: Phaser.GameObjects.Group;
@@ -70,11 +72,13 @@ export class GameScene extends Phaser.Scene {
 
     this.field = new FlowField(worldW, worldH, FIELD_CELL);
     this.zombieGroup = this.add.group();
-    this.physics.add.collider(this.zombieGroup, this.zombieGroup);
+    // zombies only collide rigidly with the player; among themselves the Crowd keeps them apart softly
     this.physics.add.collider(this.player.root, this.zombieGroup);
+    this.crowd = new Crowd<Zombie>();
     this.zombieCtx = {
       player: this.player,
       field: this.field,
+      crowd: this.crowd,
       fx: this.fx,
       speedMultiplier: () => 1,
       onKilled: () => this.kills++,
@@ -139,6 +143,8 @@ export class GameScene extends Phaser.Scene {
     }
     this.projectiles.update(dt);
     this.field.update(this.player.x, this.player.y);
+    this.crowd.rebuild(this.zombies);
+    this.crowd.resolve();
     for (const z of this.zombies) z.update(dt);
     if (this.zombies.some((z) => z.destroyed)) this.zombies = this.zombies.filter((z) => !z.destroyed);
 
@@ -210,7 +216,10 @@ export class GameScene extends Phaser.Scene {
    * so combat can be checked in headless screenshots without real input.
    */
   private applyDemo(input: InputFrame): void {
-    const demo = new URLSearchParams(location.search).get('demo') as WeaponId | null;
+    const params = new URLSearchParams(location.search);
+    // ?god=1: the player cannot die (crowd/AI checks)
+    if (params.has('god')) this.player.hp = this.player.maxHp;
+    const demo = params.get('demo') as WeaponId | null;
     if (!demo || !WEAPONS[demo]) return;
     this.player.hp = this.player.maxHp;
     if (this.player.weapon !== demo) input.weaponSlot = WEAPON_ORDER.indexOf(demo);

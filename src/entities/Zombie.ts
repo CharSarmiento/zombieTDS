@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { Damageable, Hit } from '../combat/types';
 import { ENEMIES, ZOMBIE_ANIM_SPEED, type EnemyDef, type EnemyId } from '../data/enemies';
+import type { Crowd } from '../systems/Crowd';
 import type { FlowField } from '../systems/FlowField';
 import type { Fx } from '../systems/Fx';
 import { Actor, DEPTH } from './Actor';
@@ -10,6 +11,7 @@ import type { Player } from './Player';
 export interface ZombieContext {
   player: Player;
   field: FlowField;
+  crowd: Crowd<Zombie>;
   fx: Fx;
   /** global enemy speed factor (slow-enemies pickup) */
   speedMultiplier: () => number;
@@ -31,6 +33,8 @@ export class Zombie extends Actor implements Damageable {
   private attackReadyAt = 0;
   private stateUntil = 0;
   private speed: number;
+  /** preferred side (±1) to slide around blockers, so the horde spreads both ways */
+  private side = Math.random() < 0.5 ? -1 : 1;
   private burnLeft = 0;
   private burnDps = 0;
   private burnTick = 0;
@@ -58,6 +62,10 @@ export class Zombie extends Actor implements Damageable {
 
   get alive(): boolean {
     return this.state !== 'dead';
+  }
+
+  get mass(): number {
+    return this.def.mass;
   }
 
   update(dt: number): void {
@@ -124,10 +132,14 @@ export class Zombie extends Actor implements Damageable {
       dir = this.ctx.field.direction(this.x, this.y);
     }
     const speed = speedOverride ?? this.speed * this.ctx.speedMultiplier();
+    const desired = new Phaser.Math.Vector2();
+    if (dir && speed > 0) {
+      // follow the path, but flow around neighbours instead of pushing into them
+      desired.copy(dir).add(this.ctx.crowd.avoidance(this, dir, this.side)).limit(1).scale(speed);
+    }
     const t = 1 - Math.exp(-ACCEL * dt);
     const v = this.body.velocity;
-    const tx = dir ? dir.x * speed : 0, ty = dir ? dir.y * speed : 0;
-    this.body.setVelocity(Phaser.Math.Linear(v.x, tx, t), Phaser.Math.Linear(v.y, ty, t));
+    this.body.setVelocity(Phaser.Math.Linear(v.x, desired.x, t), Phaser.Math.Linear(v.y, desired.y, t));
     const moving = this.body.velocity.length();
     if (moving > 10) this.turnTowards(Math.atan2(this.body.velocity.y, this.body.velocity.x), dt);
     this.sprite.anims.timeScale = Phaser.Math.Clamp(moving / ZOMBIE_ANIM_SPEED, 0.3, 1.8);
