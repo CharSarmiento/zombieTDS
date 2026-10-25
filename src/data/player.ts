@@ -16,6 +16,14 @@ export const PLAYER = {
   acceleration: 14,
   /** gamepad aim turn rate, rad/s */
   padTurnSpeed: 16,
+  maxHp: 100,
+  maxArmor: 100,
+  /** fraction of each hit absorbed by armor while it lasts */
+  armorAbsorb: 0.6,
+  /** invulnerability after being hit, ms */
+  invulnerableMs: 450,
+  /** knockback received is multiplied by this */
+  knockbackTaken: 0.5,
 };
 
 export const CAMERA = {

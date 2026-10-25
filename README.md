@@ -21,7 +21,7 @@ npm run dev        # http://localhost:5173
 | `npm run dev` | Development server |
 | `npm run build` | Type-check + production build into `dist/` |
 
-Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; F1 shows hitboxes in game; F9 on character select opens the animation preview.
+Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; `&demo=rifle` (any weapon id) makes the player invulnerable and auto-fires at the nearest zombie; `&horde=60` spawns that many zombies at once; in game F1 shows hitboxes, F2 refills ammo and F3 spawns 10 zombies; F9 on character select opens the animation preview.
 
 ## Controls
 
@@ -40,8 +40,8 @@ Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; F1 shows hitb
 - [x] M0 · Project setup
 - [x] M1 · Asset pipeline (atlases, pivots, muzzle-flash cleanup, preview scene)
 - [x] M2 · Player: movement, aiming, camera, keyboard/mouse + gamepad
-- [ ] M3 · Weapons: knife, pistol, bat, rifle, flamethrower
-- [ ] M4 · Zombies (tiers 1–2), flow-field AI
+- [x] M3 · Weapons: knife, pistol, bat, rifle, flamethrower
+- [x] M4 · Zombies (tiers 1–2), flow-field AI
 - [ ] M5 · Levels (Tiled maps, walls, cover, explosive barrels)
 - [ ] M6 · Level loop: waves, objectives, pickups, HUD
 - [ ] M7 · Meta: menus, character select, level map, shop, skills, save

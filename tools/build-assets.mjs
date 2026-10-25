@@ -162,10 +162,11 @@ const ENTITIES = {
 const PIVOT_OVERRIDES = {};
 const OFFSET_OVERRIDES = {};
 
-/** Simple animations: frames keep their own canvas, pivot at the centre. */
+/** Simple animations: frames keep their own canvas; pivot normalised (default centre). */
 const SIMPLE_ANIMS = [
   { group: 'fx', key: 'fx/explosion', dir: 'Explosion/PNG', scale: 0.6 },
-  { group: 'fx', key: 'fx/flame', dir: PARTS + '/shots&fire', match: /^flamethrower/i, scale: WORLD },
+  // flame drawn pointing down from the nozzle: pivot at the base so it can be placed at the muzzle
+  { group: 'fx', key: 'fx/flame', dir: PARTS + '/shots&fire', match: /^flamethrower/i, scale: WORLD, pivot: { x: 0.5, y: 0 } },
 ];
 
 const stripLayer = (s) => s.replace(/_Layer-\d+$/i, '');
@@ -514,7 +515,8 @@ async function buildSimpleAnim(def, manifest) {
   const files = listPngs(def.dir, def.match);
   const frames = await pool(files, async (file, i) => {
     const img = await loadRaw(file);
-    return makeFrame(`${def.key}/${String(i).padStart(2, '0')}`, img, def.scale, { x: img.w / 2, y: img.h / 2 });
+    const pv = def.pivot ?? { x: 0.5, y: 0.5 };
+    return makeFrame(`${def.key}/${String(i).padStart(2, '0')}`, img, def.scale, { x: img.w * pv.x, y: img.h * pv.y });
   });
   manifest.anims[def.key] = { atlas: def.group, frames: frames.map((f) => f.name) };
   return frames;

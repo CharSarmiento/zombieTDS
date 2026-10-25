@@ -22,6 +22,7 @@ export class Actor {
   readonly sprite: Phaser.GameObjects.Sprite;
   readonly shadow?: Phaser.GameObjects.Image;
   facing = Math.PI / 2;
+  destroyed = false;
 
   constructor(
     readonly scene: Phaser.Scene,
@@ -58,6 +59,8 @@ export class Actor {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.scene.events.off(Phaser.Scenes.Events.POST_UPDATE, this.sync, this);
     this.root.destroy();
     this.sprite.destroy();

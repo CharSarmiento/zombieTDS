@@ -6,7 +6,7 @@ import { CharacterSelectScene } from './scenes/CharacterSelectScene';
 import { GameScene } from './scenes/GameScene';
 import { PreloadScene } from './scenes/PreloadScene';
 
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   width: GAME_WIDTH,
@@ -24,3 +24,6 @@ new Phaser.Game({
   },
   scene: [BootScene, PreloadScene, CharacterSelectScene, GameScene, AnimPreviewScene],
 });
+
+// dev: expose the game for debugging and automated checks from the browser console
+if (import.meta.env.DEV) (window as unknown as { __game: Phaser.Game }).__game = game;

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { getManifest } from '../assets/manifest';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
-import { animSettings } from '../data/anims';
+import { animSettings, DERIVED_ANIMS } from '../data/anims';
 
 /** Loads every atlas listed in the manifest and registers all animations. */
 export class PreloadScene extends Phaser.Scene {
@@ -39,6 +39,15 @@ export class PreloadScene extends Phaser.Scene {
         frames: a.frames.map((frame) => ({ key: a.atlas, frame })),
         frameRate: s.fps,
         repeat: s.repeat,
+      });
+    }
+    for (const d of DERIVED_ANIMS) {
+      const src = manifest.anims[d.from];
+      this.anims.create({
+        key: d.key,
+        frames: d.frames.map((i) => ({ key: src.atlas, frame: src.frames[i] })),
+        frameRate: d.fps,
+        repeat: d.repeat,
       });
     }
     // The main menu arrives in M7; until then the game starts at character select.
