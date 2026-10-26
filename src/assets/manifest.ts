@@ -9,6 +9,8 @@ export interface AssetManifest {
   statics: Record<string, { atlas: string; frames: string[] }>;
   /** entity -> anim -> weapon tip offset from the pivot, sprite facing +Y */
   muzzles: Record<string, Record<string, { x: number; y: number }>>;
+  /** sound key -> variant files (empty until assets/audio has files) */
+  audio?: Record<string, string[]>;
   tileset: {
     image: string;
     tileSize: number;

@@ -19,4 +19,6 @@ This folder holds the original third-party art. Its contents are **not** in the 
 2. **Viking Squad font** (Iconian Fonts): https://www.dafont.com/viking-squad.font. Put the `.ttf` files in `assets/fonts/`.
    It is free for **non-commercial** use only. A commercial release needs a license from http://iconian.com/commercial.html.
 
+3. **Sounds (optional)**: `assets/audio/<key>.ogg` (or numbered variants `<key>_1.ogg`, `<key>_2.ogg`…). The full list of keys is in `AUDIO.md`; missing sounds are simply silent.
+
 The `.ai` (Illustrator) sources from the pack are not used by the game.

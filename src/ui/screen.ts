@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
+import { audio } from '../systems/AudioManager';
 import type { Box } from './windows';
 import { FONT } from './fonts';
 
@@ -51,6 +52,9 @@ export function fit<T extends Phaser.GameObjects.Image>(img: T, w: number, h: nu
 
 /** Short floating message (purchase done, not enough money…). */
 export function toast(scene: Phaser.Scene, x: number, y: number, message: string, color: string = COLORS.lime): void {
+  // red messages are refusals; "¡…!" in green are purchases
+  if (color === COLORS.red) audio.sfx('ui_error');
+  else if (message.startsWith('¡')) audio.sfx('ui_buy');
   const t = text(scene, x, y, message, 34, color).setStroke('#000', 6).setDepth(1000);
   scene.tweens.add({ targets: t, y: y - 60, alpha: 0, duration: 1100, ease: 'Cubic.easeOut', onComplete: () => t.destroy() });
 }

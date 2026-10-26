@@ -3,6 +3,7 @@ import type { Damageable } from '../combat/types';
 import { DEPTH } from '../entities/Actor';
 import type { Player } from '../entities/Player';
 import type { Loadout } from '../data/progression';
+import { audio } from './AudioManager';
 import { WEAPON_ORDER, type FlameWeapon, type GunWeapon, type MeleeWeapon, type WeaponDef, type WeaponId } from '../data/weapons';
 import type { Fx } from './Fx';
 import type { InputFrame } from './InputManager';
@@ -162,6 +163,7 @@ export class WeaponSystem {
     if (this.flaming) this.stopFlame(false);
     this.player.weapon = next;
     this.cooldown = Math.max(this.cooldown, 0.15);
+    audio.sfx('weapon_switch');
   }
 
   // --- guns -------------------------------------------------------------------------------
@@ -170,6 +172,8 @@ export class WeaponSystem {
     const a = this.ammo[this.player.weapon];
     if (this.cooldown > 0 || this.reloadLeft > 0) return;
     if (a.mag <= 0) {
+      // no rounds left anywhere: dry click
+      if (a.reserve <= 0 && input.firePressed) audio.sfx('empty_click');
       this.startReload();
       return;
     }
@@ -188,6 +192,7 @@ export class WeaponSystem {
     this.projectiles.fire(tip.x, tip.y, angle, w.bulletSpeed, w.range, w.damage * this.damageMultiplier, w.knockback);
     this.fx.muzzleFlash(tip.x, tip.y, aim, Phaser.Utils.Array.GetRandom(w.flashes));
     this.fx.shake(w.shake, 60);
+    audio.sfx(w.auto ? 'rifle_shot' : 'gun_shot');
     if (a.mag === 0) this.startReload();
   }
 
@@ -197,6 +202,7 @@ export class WeaponSystem {
     const a = this.ammo[this.player.weapon];
     if (a.mag >= w.magazine || a.reserve <= 0) return;
     this.reloadLeft = w.reload;
+    audio.sfx('reload');
   }
 
   private finishReload(): void {
@@ -242,6 +248,7 @@ export class WeaponSystem {
   private swing(w: MeleeWeapon): void {
     this.cooldown = w.cooldown;
     this.player.playAttack(`attack_${w.anim}`, w.cooldown);
+    audio.sfx(w.anim === 'bat' ? 'bat_swing' : 'knife_swing');
     const weapon = this.player.weapon;
     this.scene.time.delayedCall(w.cooldown * w.hitAt * 1000, () => {
       if (this.player.weapon !== weapon) return;
@@ -250,7 +257,10 @@ export class WeaponSystem {
         t.takeDamage({ amount: w.damage * this.damageMultiplier, source: 'melee', fromX: this.player.x, fromY: this.player.y, knockback: w.knockback });
         hits++;
       }
-      if (hits) this.fx.shake(w.shake, 110);
+      if (hits) {
+        this.fx.shake(w.shake, 110);
+        audio.sfx('melee_hit');
+      }
     });
   }
 
@@ -276,8 +286,9 @@ export class WeaponSystem {
     if (wants && !this.flaming) this.startFlame();
     if (!wants && this.flaming) this.stopFlame(true);
     if (!this.flaming) return;
+    audio.loop('flame_loop'); // no-op while playing; restarts it after a pause
 
-    a.fuel = Math.max(0, a.fuel - w.fuelPerSecond * dt);
+    a.fuel =Math.max(0, a.fuel - w.fuelPerSecond * dt);
     const tip = this.player.muzzle('walk_flame');
     this.flameFx?.setPosition(tip.x, tip.y).setRotation(this.player.facing - Math.PI / 2);
 
@@ -299,6 +310,7 @@ export class WeaponSystem {
   private startFlame(): void {
     this.flaming = true;
     this.flameTick = 0;
+    audio.loop('flame_loop');
     this.player.playAttackLoop('attack_flame_start', 'attack_flame_loop');
     // the baked flame is short: a longer stream sprite extends it to the real reach
     this.flameFx = this.scene.add
@@ -313,6 +325,7 @@ export class WeaponSystem {
   private stopFlame(withOutro: boolean): void {
     this.flaming = false;
     this.cooldown = 0.25;
+    audio.stopLoop('flame_loop');
     this.player.endAttack(withOutro ? 'attack_flame_end' : undefined);
     const f = this.flameFx;
     this.flameFx = undefined;

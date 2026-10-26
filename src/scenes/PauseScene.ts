@@ -33,11 +33,14 @@ export class PauseScene extends Phaser.Scene {
     this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.65).setOrigin(0);
     this.add.text(GAME_WIDTH / 2, 150, 'PAUSA', { fontFamily: FONT, fontSize: '110px', color: '#c8e04a' }).setOrigin(0.5).setStroke('#000', 10);
 
-    this.menu = new MenuList(this, 560, 420, [
+    this.menu = new MenuList(this, 560, 380, [
       { label: 'CONTINUAR', action: () => this.resume() },
       { label: 'REINICIAR', action: () => this.restart() },
+      { label: 'OPCIONES', action: () => this.options() },
       { label: 'SALIR', action: () => this.quit() },
     ]);
+    // back from the options overlay: forget the button that closed it
+    this.events.on(Phaser.Scenes.Events.WAKE, () => this.controls.reset());
 
     const x = 920, y = 340;
     this.add.rectangle(x - 30, y - 30, 900, CONTROLS.length * 54 + 40, 0x000000, 0.5).setOrigin(0).setStrokeStyle(3, 0x8a8a5a, 0.9);
@@ -66,6 +69,11 @@ export class PauseScene extends Phaser.Scene {
   private restart(): void {
     this.scene.stop();
     this.scene.start('Game', { level: this.level });
+  }
+
+  private options(): void {
+    this.scene.launch('Options', { from: 'Pause' });
+    this.scene.sleep();
   }
 
   private quit(): void {

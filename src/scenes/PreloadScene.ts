@@ -3,6 +3,7 @@ import { getManifest } from '../assets/manifest';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { animSettings, DERIVED_ANIMS } from '../data/anims';
 import { LEVELS, mapKey, PROPS_TILESET_KEY, TEST_LEVELS } from '../data/levels';
+import { audio } from '../systems/AudioManager';
 
 /** Loads every atlas listed in the manifest and registers all animations. */
 export class PreloadScene extends Phaser.Scene {
@@ -30,12 +31,14 @@ export class PreloadScene extends Phaser.Scene {
     this.load.json(PROPS_TILESET_KEY, 'tilesets/props.tsj');
     const maps = new Set([...LEVELS, ...(import.meta.env.DEV ? TEST_LEVELS : [])].map((l) => l.map));
     for (const map of maps) this.load.json(mapKey(map), `maps/${map}.json`);
+    audio.load(this, manifest);
     this.load.image('bg1', 'images/bg1.png');
     this.load.image('bg2', 'images/bg2.png');
   }
 
   create(): void {
     const manifest = getManifest(this);
+    audio.init(this.game);
     for (const [key, a] of Object.entries(manifest.anims)) {
       const s = animSettings(key);
       this.anims.create({

@@ -27,8 +27,9 @@ export class MainMenuScene extends MenuScene {
       ['ARSENAL', () => this.go('Shop')],
       ['HABILIDADES', () => this.go('Skills')],
       ['PERSONAJE', () => this.go('CharacterSelect')],
+      ['OPCIONES', () => this.go('Options', { from: 'MainMenu' })],
     ];
-    const buttons = actions.map(([label, action], i) => addButton(this, this.focus, lx, 420 + i * 125, label, action, 0.9));
+    const buttons = actions.map(([label, action], i) => addButton(this, this.focus, lx, 390 + i * 118, label, action, 0.85));
     this.focus.focus(buttons[0].item);
 
     // right: the pack's main window as a status board

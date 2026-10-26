@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audio } from '../systems/AudioManager';
 import { InputManager } from '../systems/InputManager';
 import { FocusGroup } from '../ui/Focus';
 
@@ -18,6 +19,7 @@ export abstract class MenuScene extends Phaser.Scene {
     this.focus = new FocusGroup(this);
     this.input.setDefaultCursor('default');
     this.cameras.main.fadeIn(180, 0, 0, 0);
+    audio.playMusic('music_menu');
   }
 
   protected abstract back(): void;

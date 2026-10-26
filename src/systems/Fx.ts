@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getManifest } from '../assets/manifest';
 import { DEPTH } from '../entities/Actor';
 import { FONT } from '../ui/fonts';
+import { loadSave } from './SaveManager';
 
 const MAX_BLOOD = 160;
 const BLOOD_TINT = 0x5e0b0b;
@@ -50,6 +51,7 @@ export class Fx {
   }
 
   damageNumber(x: number, y: number, amount: number, color = '#ffffff'): void {
+    if (!loadSave().options.damageNumbers) return;
     const t = this.scene.add
       .text(x + Phaser.Math.Between(-12, 12), y - 30, String(Math.round(amount)), {
         fontFamily: FONT,
@@ -63,6 +65,6 @@ export class Fx {
   }
 
   shake(intensity: number, ms = 90): void {
-    if (intensity > 0) this.scene.cameras.main.shake(ms, intensity, false);
+    if (intensity > 0 && loadSave().options.shake) this.scene.cameras.main.shake(ms, intensity, false);
   }
 }

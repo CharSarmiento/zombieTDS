@@ -42,7 +42,8 @@ export interface ObjectiveStatus {
 /**
  * Runs a level's objective steps in order: wave batches with breaks, survival timers and
  * reach-the-exit goals, spawning enemies as each step dictates.
- * Emits 'banner' (title, subtitle) for big announcements and 'complete' when the level is won.
+ * Emits 'banner' (title, subtitle, sound key?) for big announcements, 'bossStart' / 'bossEnd'
+ * around boss fights, and 'complete' when the level is won.
  */
 export class LevelDirector {
   readonly events = new Phaser.Events.EventEmitter();
@@ -105,6 +106,7 @@ export class LevelDirector {
     if (!b) return;
     if (!b.alive) {
       this.events.emit('banner', '¡JEFE ABATIDO!', b.def.name);
+      this.events.emit('bossEnd');
       this.boss = undefined;
       this.nextStep();
       return;
@@ -114,7 +116,7 @@ export class LevelDirector {
     if (next && b.hp / b.maxHp <= next.at) {
       this.phase++;
       b.enrage(next.enrage);
-      this.events.emit('banner', '¡REFUERZOS!', `${b.def.name} está furioso`);
+      this.events.emit('banner', '¡REFUERZOS!', `${b.def.name} está furioso`, 'boss_roar');
       this.spawnAround(expand(next.summon));
     }
   }
@@ -196,17 +198,18 @@ export class LevelDirector {
         this.beginBreak(step, 2.5);
         break;
       case 'survive':
-        this.events.emit('banner', 'SOBREVIVE', `${step.seconds} segundos`);
+        this.events.emit('banner', 'SOBREVIVE', `${step.seconds} segundos`, 'wave_start');
         break;
       case 'reach':
-        this.events.emit('banner', '¡ZONA DESPEJADA!', step.label ? step.label.replace(/[¡!]/g, '').toLowerCase().replace(/^./, (c) => c.toUpperCase()) : 'Llega a la salida');
+        this.events.emit('banner', '¡ZONA DESPEJADA!', step.label ? step.label.replace(/[¡!]/g, '').toLowerCase().replace(/^./, (c) => c.toUpperCase()) : 'Llega a la salida', 'wave_clear');
         break;
       case 'boss': {
         this.phase = 0;
         const p = this.ctx.bossPoint ?? this.ctx.picker.pick();
         if (!p) break;
         this.boss = this.ctx.spawn(step.boss, p.x, p.y);
-        this.events.emit('banner', this.boss.def.name.toUpperCase(), '¡Ha llegado un jefe!');
+        this.events.emit('banner', this.boss.def.name.toUpperCase(), '¡Ha llegado un jefe!', 'boss_roar');
+        this.events.emit('bossStart');
         this.spawnAround(expand(step.escort));
         break;
       }
@@ -234,7 +237,7 @@ export class LevelDirector {
       this.waveIndex++;
       if (this.waveIndex >= waves.length) this.nextStep();
       else {
-        this.events.emit('banner', '¡OLEADA SUPERADA!', `Siguiente en ${breakTime} s`);
+        this.events.emit('banner', '¡OLEADA SUPERADA!', `Siguiente en ${breakTime} s`, 'wave_clear');
         this.breakLeft = breakTime;
       }
     }
@@ -245,7 +248,7 @@ export class LevelDirector {
     this.queue = Phaser.Utils.Array.Shuffle(list);
     this.waveTotal = list.length;
     this.spawnTimer = 0;
-    this.events.emit('banner', `OLEADA ${this.waveIndex + 1}`, this.waveIndex + 1 === total ? 'La última' : `de ${total}`);
+    this.events.emit('banner', `OLEADA ${this.waveIndex + 1}`, this.waveIndex + 1 === total ? 'La última' : `de ${total}`, 'wave_start');
   }
 
   private trickle(t: Trickle, dt: number): void {

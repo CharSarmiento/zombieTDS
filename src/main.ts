@@ -6,6 +6,7 @@ import { CharacterSelectScene } from './scenes/CharacterSelectScene';
 import { GameScene } from './scenes/GameScene';
 import { LevelMapScene } from './scenes/LevelMapScene';
 import { MainMenuScene } from './scenes/MainMenuScene';
+import { OptionsScene } from './scenes/OptionsScene';
 import { ShopScene } from './scenes/ShopScene';
 import { SkillsScene } from './scenes/SkillsScene';
 import { PauseScene } from './scenes/PauseScene';
@@ -30,7 +31,7 @@ const game = new Phaser.Game({
   },
   scene: [
     BootScene, PreloadScene, MainMenuScene, LevelMapScene, ShopScene, SkillsScene, CharacterSelectScene,
-    GameScene, PauseScene, ResultsScene, AnimPreviewScene,
+    OptionsScene, GameScene, PauseScene, ResultsScene, AnimPreviewScene,
   ],
 });
 

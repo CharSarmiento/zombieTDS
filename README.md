@@ -59,7 +59,8 @@ Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; `&level=test_
 - [x] M7 · Meta: menus, character select, level map, shop, skills, save
 - [x] M8 · Elites and bosses (bosses always fight alongside escorts and reinforcements)
 - [x] M9 · 10-level campaign and balance
-- [ ] M10 · Audio, options, polish, desktop build
+- [x] M10 · Audio system (see `AUDIO.md`), options (volumes, shake, damage numbers, fullscreen), polish
+- [ ] Desktop build (.exe) — optional
 
 ## Third-party content
 

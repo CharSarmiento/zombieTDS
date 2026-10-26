@@ -1,8 +1,19 @@
 import type { CharacterId } from '../data/player';
 import { STARTING_WEAPONS, type Progress } from '../data/progression';
 
-/** Persistent progress. */
+export interface Options {
+  /** 0..1 */
+  music: number;
+  sfx: number;
+  shake: boolean;
+  damageNumbers: boolean;
+}
+
+export const DEFAULT_OPTIONS: Options = { music: 0.6, sfx: 0.8, shake: true, damageNumbers: true };
+
+/** Persistent progress and settings. */
 export interface SaveData extends Progress {
+  options: Options;
   version: 1;
   character: CharacterId;
   money: number;
@@ -22,6 +33,7 @@ const defaults = (): SaveData => ({
   owned: [...STARTING_WEAPONS],
   upgrades: {},
   skills: {},
+  options: { ...DEFAULT_OPTIONS },
 });
 
 let cache: SaveData | null = null;
@@ -30,7 +42,9 @@ export function loadSave(): SaveData {
   if (cache) return cache;
   try {
     const raw = localStorage.getItem(KEY);
-    cache = raw ? { ...defaults(), ...(JSON.parse(raw) as Partial<SaveData>) } : defaults();
+    const stored = raw ? (JSON.parse(raw) as Partial<SaveData>) : {};
+    // older saves have no (or partial) options: fill in the defaults
+    cache = { ...defaults(), ...stored, options: { ...DEFAULT_OPTIONS, ...stored.options } };
   } catch {
     cache = defaults();
   }
@@ -47,6 +61,10 @@ export function updateSave(patch: Partial<SaveData>): SaveData {
   return cache;
 }
 
+export function updateOptions(patch: Partial<Options>): Options {
+  return updateSave({ options: { ...loadSave().options, ...patch } }).options;
+}
+
 /** Spends money if there is enough; returns false otherwise. */
 export function spend(amount: number, apply: (save: SaveData) => Partial<SaveData>): boolean {
   const save = loadSave();
@@ -55,9 +73,9 @@ export function spend(amount: number, apply: (save: SaveData) => Partial<SaveDat
   return true;
 }
 
-/** Wipes all progress (options menu, dev). */
+/** Wipes all progress but keeps the settings (options menu, dev). */
 export function resetSave(): SaveData {
-  cache = defaults();
+  cache = { ...defaults(), options: loadSave().options };
   return updateSave({});
 }
 

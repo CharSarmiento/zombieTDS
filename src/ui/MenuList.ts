@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { InputFrame } from '../systems/InputManager';
+import { audio } from '../systems/AudioManager';
 import { BUTTON_LABEL_DY } from './Button';
 import { FONT } from './fonts';
 
@@ -36,7 +37,7 @@ export class MenuList {
         .text(0, by + BUTTON_LABEL_DY * scale, item.label, { fontFamily: FONT, fontSize: `${Math.round(40 * scale)}px`, color: '#1b220c' })
         .setOrigin(0.5);
       bg.on('pointerover', () => this.select(i));
-      bg.on('pointerdown', () => item.action());
+      bg.on('pointerdown', () => this.run(item));
       this.root.add([bg, text]);
       this.buttons.push({ bg, text });
     });
@@ -49,10 +50,16 @@ export class MenuList {
 
   update(input: InputFrame): void {
     if (input.navY) this.select(Phaser.Math.Wrap(this.index + input.navY, 0, this.items.length));
-    if (input.confirmPressed) this.items[this.index].action();
+    if (input.confirmPressed) this.run(this.items[this.index]);
+  }
+
+  private run(item: MenuItem): void {
+    audio.sfx('ui_select');
+    item.action();
   }
 
   private select(i: number): void {
+    if (i !== this.index && this.buttons.length) audio.sfx('ui_move');
     this.index = i;
     this.buttons.forEach(({ bg, text }, j) => {
       const on = j === i;

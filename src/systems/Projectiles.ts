@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { Damageable } from '../combat/types';
 import { DEPTH } from '../entities/Actor';
+import { audio } from './AudioManager';
 import type { Fx } from './Fx';
 
 interface Bullet {
@@ -56,6 +57,7 @@ export class Projectiles {
       const wall = this.blocker(x0, y0, dx, dy);
       if (wall !== null && (!hit || wall < hit.t)) {
         this.fx.impact(x0 + dx * wall, y0 + dy * wall, Math.atan2(dy, dx));
+        audio.sfx('bullet_wall');
         this.release(b);
         continue;
       }
@@ -63,6 +65,7 @@ export class Projectiles {
         const hx = x0 + dx * hit.t, hy = y0 + dy * hit.t;
         hit.target.takeDamage({ amount: b.damage, source: 'bullet', fromX: x0, fromY: y0, knockback: b.knockback });
         this.fx.impact(hx, hy, Math.atan2(dy, dx));
+        audio.sfx('bullet_hit');
         this.release(b);
         continue;
       }

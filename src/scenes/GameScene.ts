@@ -11,6 +11,8 @@ import { Barrel, EXPLOSION } from '../entities/Barrel';
 import { Player } from '../entities/Player';
 import { Zombie, type ZombieContext } from '../entities/Zombie';
 import { Level } from '../level/Level';
+import type { SfxKey } from '../data/sounds';
+import { audio } from '../systems/AudioManager';
 import { Crowd } from '../systems/Crowd';
 import { Fx } from '../systems/Fx';
 import { InputManager, type InputFrame } from '../systems/InputManager';
@@ -52,6 +54,8 @@ export class GameScene extends Phaser.Scene {
   private zombieGroup!: Phaser.GameObjects.Group;
   private zombieCtx!: ZombieContext;
   private kills = 0;
+  /** seconds until the next ambient groan */
+  private groanTimer = 3;
   private elapsed = 0;
   private ended = false;
   private crosshair!: Phaser.GameObjects.Image;
@@ -136,8 +140,13 @@ export class GameScene extends Phaser.Scene {
     this.player.events.on('hurt', () => {
       this.fx.shake(0.008, 140);
       this.fx.bloodSplat(this.player.x, this.player.y, 0.6);
+      audio.sfx('player_hurt');
     });
-    this.player.events.on('died', () => this.time.delayedCall(1600, () => this.endRun(false)));
+    this.player.events.on('died', () => {
+      audio.sfx('player_death');
+      audio.stopAllLoops();
+      this.time.delayedCall(1600, () => this.endRun(false));
+    });
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, width, height);
@@ -154,8 +163,18 @@ export class GameScene extends Phaser.Scene {
     this.weaponHud = new WeaponHud(this);
     this.playerHud = new PlayerHud(this, this.player);
     this.levelHud = new LevelHud(this, this.player, { exit: this.level.exits });
-    this.director.events.on('banner', (title: string, sub: string) => this.levelHud.banner(title, sub));
+    this.director.events.on('banner', (title: string, sub: string, sound?: SfxKey) => {
+      this.levelHud.banner(title, sub);
+      if (sound) audio.sfx(sound);
+    });
+    this.director.events.on('bossStart', () => audio.playMusic('music_boss'));
+    this.director.events.on('bossEnd', () => audio.playMusic('music_level'));
     this.director.events.on('complete', () => this.onLevelComplete());
+    audio.playMusic('music_level');
+    // the flamethrower loop must not outlive the scene (restart, quit from the pause)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => audio.stopAllLoops());
+    this.events.on(Phaser.Scenes.Events.PAUSE, () => audio.stopAllLoops());
+    this.groanTimer = 3;
     this.levelHud.banner(this.def.name.toUpperCase(), 'Sobrevive');
     this.time.delayedCall(1800, () => this.director.start());
 
@@ -177,6 +196,7 @@ export class GameScene extends Phaser.Scene {
     this.targets = [...this.zombies, ...this.barrels];
     this.weapons.damageMultiplier = this.loadout.damageMultiplier * (this.player.buffs.superpower > 0 ? BUFF_EFFECT.damageMultiplier : 1);
     this.player.update(input, dt);
+    this.updateAmbience(dt);
     if (this.player.alive) {
       this.weapons.update(input, dt);
       this.director.update(dt);
@@ -212,9 +232,24 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(2400, () => this.endRun(true));
   }
 
+  /** Footsteps while walking, and the horde groaning now and then (more often when it is big). */
+  private updateAmbience(dt: number): void {
+    if (!this.player.alive) return;
+    if (this.player.moving) audio.sfx('footstep');
+    const alive = this.zombies.filter((z) => z.alive).length;
+    if (!alive) return;
+    this.groanTimer -= dt;
+    if (this.groanTimer > 0) return;
+    this.groanTimer = Phaser.Math.FloatBetween(2, 5) / Math.min(3, 1 + alive / 10);
+    audio.sfx('zombie_groan', Phaser.Math.FloatBetween(0.5, 1));
+  }
+
   private endRun(victory: boolean): void {
     if (this.ended) return;
     this.ended = true;
+    audio.stopAllLoops();
+    audio.stopMusic();
+    audio.sfx(victory ? 'level_complete' : 'game_over');
     const collected = this.pickups.money;
     const bonus = victory ? this.def.reward : 0;
     const banked = victory ? collected + bonus : Math.floor(collected * DEATH_KEEP);

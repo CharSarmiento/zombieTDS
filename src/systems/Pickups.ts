@@ -4,6 +4,7 @@ import { DROPS, PICKUP_VALUES, PICKUPS, type PickupKind } from '../data/pickups'
 import { DEPTH } from '../entities/Actor';
 import type { Player } from '../entities/Player';
 import { FONT } from '../ui/fonts';
+import { audio } from './AudioManager';
 import { pickWeighted } from './SpawnPicker';
 import type { WeaponSystem } from './WeaponSystem';
 
@@ -117,6 +118,7 @@ export class Pickups {
         break;
     }
     this.floatText(p.x, p.y - 50, text, PICKUPS[it.kind].color);
+    audio.sfx(it.kind === 'money' ? 'pickup_money' : ['speed', 'slow', 'superpower'].includes(it.kind) ? 'powerup' : 'pickup_item');
     this.remove(it);
   }
 

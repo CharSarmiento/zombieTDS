@@ -615,6 +615,29 @@ async function buildPropsTileset(frames) {
   console.log(`  -> props tileset: ${tiles.length} images`);
 }
 
+/**
+ * Copies assets/audio/* (ogg, mp3, wav, m4a) to public/audio and lists them in the manifest by key.
+ * "zombie_death_2.ogg" is variant 2 of key "zombie_death"; the game picks a random variant.
+ * Missing keys simply stay silent, so sounds can be added at any time.
+ */
+async function copyAudio(manifest) {
+  const dir = path.join(SRC, 'audio');
+  const out = path.join(PUBLIC, 'audio');
+  manifest.audio = {};
+  // always mirror assets/audio exactly: removed sounds must not linger in public/
+  await fs.rm(out, { recursive: true, force: true });
+  if (!fss.existsSync(dir)) return;
+  await fs.mkdir(out, { recursive: true });
+  for (const file of fss.readdirSync(dir).sort()) {
+    if (!/\.(ogg|mp3|wav|m4a)$/i.test(file)) continue;
+    const key = file.replace(/\.[^.]+$/, '').toLowerCase().replace(/[\s-]+/g, '_').replace(/_\d+$/, '');
+    await fs.copyFile(path.join(dir, file), path.join(out, file));
+    (manifest.audio[key] ??= []).push(`audio/${file}`);
+  }
+  const n = Object.values(manifest.audio).reduce((s, l) => s + l.length, 0);
+  console.log(`  -> audio: ${n} files, ${Object.keys(manifest.audio).length} keys`);
+}
+
 async function buildTileset(manifest) {
   const cell = TILE + TILE_EXTRUDE * 2;
   const cols = 13;
@@ -723,6 +746,8 @@ async function main() {
     await fs.mkdir(path.dirname(to), { recursive: true });
     await fs.copyFile(path.join(SRC, c.from), to);
   }
+  await copyAudio(manifest);
+
   const fontDir = path.join(SRC, 'fonts');
   if (fss.existsSync(fontDir)) {
     await fs.mkdir(path.join(PUBLIC, 'fonts'), { recursive: true });

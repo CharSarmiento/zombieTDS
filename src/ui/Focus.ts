@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audio } from '../systems/AudioManager';
 import type { InputFrame } from '../systems/InputManager';
 
 /** Something selectable in a menu screen. */
@@ -50,6 +51,7 @@ export class FocusGroup {
   focus(item: Focusable | undefined): void {
     const i = item ? this.items.indexOf(item) : -1;
     if (i === this.index) return;
+    if (this.index >= 0) audio.sfx('ui_move');
     this.current?.onBlur?.();
     this.index = i;
     this.current?.onFocus?.();
@@ -57,7 +59,7 @@ export class FocusGroup {
 
   update(input: InputFrame): void {
     if (input.navX || input.navY) this.move(input.navX, input.navY);
-    if (input.confirmPressed && this.current && !this.current.disabled?.()) this.current.activate();
+    if (input.confirmPressed && this.current && !this.current.disabled?.()) this.activate(this.current);
   }
 
   private move(dx: number, dy: number): void {
@@ -97,6 +99,11 @@ export class FocusGroup {
     const it = this.hitAt(p);
     if (!it || !p.leftButtonDown()) return;
     this.focus(it);
-    if (!it.disabled?.()) it.activate();
+    if (!it.disabled?.()) this.activate(it);
+  }
+
+  private activate(it: Focusable): void {
+    audio.sfx('ui_select');
+    it.activate();
   }
 }

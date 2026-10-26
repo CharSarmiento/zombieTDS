@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { Damageable, Hit } from '../combat/types';
 import { drawShape, shapeHits } from '../combat/shapes';
 import { ENEMIES, ZOMBIE_ANIM_SPEED, type AttackDef, type EnemyDef, type EnemyId } from '../data/enemies';
+import { audio } from '../systems/AudioManager';
 import type { Crowd } from '../systems/Crowd';
 import { pickWeighted } from '../systems/SpawnPicker';
 import type { FlowField } from '../systems/FlowField';
@@ -217,6 +218,7 @@ export class Zombie extends Actor implements Damageable {
     // every attack waits a little before the next one, so attacks do not chain instantly
     this.globalReadyAt = now + ms + 250;
 
+    this.attackSound(a);
     const atk: ActiveAttack = { def: a, ox: this.x, oy: this.y, angle: this.facing, start: now, hitTime: now + ms * a.hitAt, endTime: now + ms };
     if (a.telegraph) {
       atk.marker = this.scene.add.graphics().setPosition(atk.ox, atk.oy).setRotation(atk.angle).setDepth(DEPTH.decal + 2);
@@ -323,6 +325,13 @@ export class Zombie extends Actor implements Damageable {
     }
   }
 
+  private attackSound(a: AttackDef): void {
+    if (this.def.tier < 3) return audio.sfx('zombie_attack');
+    if (a.linger) return audio.sfx('fire_breath');
+    if (a.shape.type === 'circle') return audio.sfx('boss_slam', this.def.tier >= 4 ? 1 : 0.7);
+    audio.sfx(this.def.tier >= 4 ? 'boss_attack' : 'elite_roar', this.def.tier >= 4 ? 1 : 0.6);
+  }
+
   /** Phase change of a boss: faster from now on. */
   enrage(multiplier: number): void {
     this.rage = multiplier;
@@ -367,6 +376,7 @@ export class Zombie extends Actor implements Damageable {
     this.attack = undefined;
     this.state = 'dead';
     this.burnLeft = 0;
+    audio.sfx(this.def.tier >= 4 ? 'boss_death' : 'zombie_death');
     if (this.def.tier >= 4) {
       this.ctx.fx.shake(0.02, 600);
       for (let i = 0; i < 6; i++) this.ctx.fx.bloodSplat(this.x + Phaser.Math.Between(-80, 80), this.y + Phaser.Math.Between(-80, 80), 2.2);

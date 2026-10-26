@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { Damageable, Hit } from '../combat/types';
 import type { ExplosivePlacement, Level } from '../level/Level';
+import { audio } from '../systems/AudioManager';
 import { DEPTH } from './Actor';
 
 export const EXPLOSION = {
@@ -55,6 +56,7 @@ export class Barrel implements Damageable {
         .setScale(2.4)
         .setRotation(Math.random() * Math.PI * 2)
         .setDepth(DEPTH.decal);
+      audio.sfx('explosion');
       const boom = this.scene.add.sprite(this.x, this.y, 'fx').play('fx/explosion').setScale(1.7).setDepth(DEPTH.overhead + 1);
       boom.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => boom.destroy());
       this.onExplode(this);

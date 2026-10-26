@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { CHARACTERS, type CharacterId } from '../data/player';
+import { audio } from '../systems/AudioManager';
 import { InputManager } from '../systems/InputManager';
 import { loadSave, updateSave } from '../systems/SaveManager';
 import { FONT } from '../ui/fonts';
@@ -20,6 +21,7 @@ export class CharacterSelectScene extends Phaser.Scene {
 
   create(): void {
     this.controls = new InputManager(this);
+    audio.playMusic('music_menu');
     this.index = Math.max(0, ORDER.indexOf(loadSave().character));
 
     this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'bg1').setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
