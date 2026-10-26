@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { InputFrame } from '../systems/InputManager';
+import { BUTTON_LABEL_DY } from './Button';
 import { FONT } from './fonts';
 
 export interface MenuItem {
@@ -32,7 +33,7 @@ export class MenuList {
       const by = i * (h + GAP);
       const bg = scene.add.image(0, by, 'ui', BUTTON_FRAME).setScale(scale).setInteractive({ useHandCursor: true });
       const text = scene.add
-        .text(0, by, item.label, { fontFamily: FONT, fontSize: `${Math.round(40 * scale)}px`, color: '#1b220c' })
+        .text(0, by + BUTTON_LABEL_DY * scale, item.label, { fontFamily: FONT, fontSize: `${Math.round(40 * scale)}px`, color: '#1b220c' })
         .setOrigin(0.5);
       bg.on('pointerover', () => this.select(i));
       bg.on('pointerdown', () => item.action());

@@ -130,6 +130,7 @@ export class LevelDirector {
 
   get status(): ObjectiveStatus {
     const step = this.step;
+    if (this.stepIndex < 0) return { title: this.def.name.toUpperCase(), detail: 'Prepárate…', progress: null, target: null };
     if (!step || this.done) return { title: '¡NIVEL COMPLETADO!', detail: '', progress: 1, target: null };
     switch (step.type) {
       case 'waves': {
@@ -150,7 +151,7 @@ export class LevelDirector {
         return { title: 'SOBREVIVE', detail: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, progress: this.stepTime / step.seconds, target: null };
       }
       case 'reach':
-        return { title: 'LLEGA A LA SALIDA', detail: 'Sigue la flecha', progress: null, target: step.marker };
+        return { title: step.label ?? 'LLEGA A LA SALIDA', detail: 'Sigue la flecha', progress: null, target: step.marker };
       case 'boss': {
         const b = this.boss;
         if (!b) return { title: 'JEFE', detail: '', progress: null, target: null };
@@ -197,7 +198,7 @@ export class LevelDirector {
         this.events.emit('banner', 'SOBREVIVE', `${step.seconds} segundos`);
         break;
       case 'reach':
-        this.events.emit('banner', '¡ZONA DESPEJADA!', 'Llega a la salida');
+        this.events.emit('banner', '¡ZONA DESPEJADA!', step.label ? step.label.replace(/[¡!]/g, '').toLowerCase().replace(/^./, (c) => c.toUpperCase()) : 'Llega a la salida');
         break;
       case 'boss': {
         this.phase = 0;

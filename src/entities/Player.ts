@@ -145,6 +145,22 @@ export class Player extends Actor {
     }
   }
 
+  /**
+   * Facing that puts the weapon's line of fire (not the body centre) through a world point.
+   * The gun is held ~25px to the side, so pointing the body at the cursor would make bullets
+   * fly parallel to it; this turns the body slightly so the barrel lines up instead.
+   */
+  facingToHit(tx: number, ty: number): number {
+    const base = Phaser.Math.Angle.Between(this.x, this.y, tx, ty);
+    const tip = getManifest(this.scene).muzzles[this.character]?.[`walk_${WEAPONS[this.weapon].anim}`];
+    if (!tip) return base; // melee weapons: no barrel to line up
+    // sprite space faces +Y: the tip's x is its sideways offset (positive = to the left of the aim)
+    const lateral = -tip.x;
+    const d = Phaser.Math.Distance.Between(this.x, this.y, tx, ty);
+    if (d <= Math.abs(lateral) + 10) return base;
+    return base - Math.asin(lateral / d);
+  }
+
   /** Weapon tip in world coordinates for the given animation (falls back to the body centre). */
   muzzle(anim: string): Phaser.Math.Vector2 {
     const tip = getManifest(this.scene).muzzles[this.character]?.[anim];
@@ -177,7 +193,7 @@ export class Player extends Actor {
 
   private updateAim(input: InputFrame, dt: number): void {
     if (input.aimWorld) {
-      this.facing = Phaser.Math.Angle.Between(this.x, this.y, input.aimWorld.x, input.aimWorld.y);
+      this.facing = this.facingToHit(input.aimWorld.x, input.aimWorld.y);
       return;
     }
     // gamepad: right stick aims; without it, face where you walk

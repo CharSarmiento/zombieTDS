@@ -48,6 +48,12 @@ export class InputManager {
   private tapped = new Set<number>();
   private mouseDown = false;
   private mousePressed = false;
+  /**
+   * Last state seen of each pad button in THIS scene: true held, false released, undefined not
+   * seen yet. A press only counts after the button was seen released here, so a button still held
+   * from the previous scene (the Start that opened the pause, the A that confirmed a menu) never
+   * fires again in the new one.
+   */
   private prevButtons: boolean[] = [];
   private prevNav = { x: 0, y: 0 };
   private lastPointer = { x: 0, y: 0 };
@@ -70,11 +76,23 @@ export class InputManager {
     return gp && gp.total > 0 ? gp.getAll()[0] : undefined;
   }
 
+  /**
+   * Button state straight from the browser. Each Phaser scene keeps its own copy of the pad that
+   * starts "all released" and syncs a frame later, which made a button held across a scene change
+   * (Start opening the pause) look like a brand-new press in the new scene.
+   */
+  private rawButtons(): readonly GamepadButton[] {
+    const pad = this.pad;
+    if (!pad) return [];
+    return navigator.getGamepads?.()[pad.index]?.buttons ?? [];
+  }
+
   update(): InputFrame {
     const pad = this.pad;
-    const pressed = (i: number) => !!pad?.buttons[i]?.pressed;
-    const value = (i: number) => pad?.buttons[i]?.value ?? 0;
-    const down = (i: number) => pressed(i) && !this.prevButtons[i];
+    const raw = this.rawButtons();
+    const pressed = (i: number) => !!raw[i]?.pressed;
+    const value = (i: number) => raw[i]?.value ?? 0;
+    const down = (i: number) => pressed(i) && this.prevButtons[i] === false;
 
     // --- device detection
     const p = this.scene.input.activePointer;
@@ -82,7 +100,7 @@ export class InputManager {
     this.lastPointer = { x: p.x, y: p.y };
     const left = pad ? radial(pad.leftStick) : new Phaser.Math.Vector2();
     const right = pad ? radial(pad.rightStick) : new Phaser.Math.Vector2();
-    if (pad && (left.lengthSq() > 0 || right.lengthSq() > 0 || pad.buttons.some((b) => b.pressed))) this.device = 'pad';
+    if (pad && (left.lengthSq() > 0 || right.lengthSq() > 0 || raw.some((b) => b.pressed))) this.device = 'pad';
 
     const k = this.keys;
     // pressed since the last frame, from keydown events: never misses a tap shorter than a frame
@@ -113,7 +131,7 @@ export class InputManager {
       aimWorld: this.device === 'kbm' ? p.positionToCamera(cam) as Phaser.Math.Vector2 : null,
       aimDir: this.device === 'pad' && right.lengthSq() > 0 ? right.clone().normalize() : null,
       fire: this.mouseDown || value(BTN.RT) > TRIGGER_THRESHOLD,
-      firePressed: this.mousePressed || (value(BTN.RT) > TRIGGER_THRESHOLD && !this.prevButtons[BTN.RT]),
+      firePressed: this.mousePressed || (value(BTN.RT) > TRIGGER_THRESHOLD && this.prevButtons[BTN.RT] === false),
       reloadPressed: jd('R') || down(BTN.X),
       sprint: k.SHIFT.isDown || pressed(BTN.L3),
       weaponDelta: Math.sign(this.wheel) || +(jd('E') || down(BTN.RB)) - +(jd('Q') || down(BTN.LB)),
@@ -125,7 +143,7 @@ export class InputManager {
       navY: kbNavY || padNavY,
     };
 
-    this.prevButtons = pad ? pad.buttons.map((b, i) => (i === BTN.RT ? b.value > TRIGGER_THRESHOLD : b.pressed)) : [];
+    this.prevButtons = raw.map((b, i) => (i === BTN.RT ? b.value > TRIGGER_THRESHOLD : b.pressed));
     this.wheel = 0;
     this.mousePressed = false;
     this.tapped.clear();
@@ -139,7 +157,7 @@ export class InputManager {
     this.mouseDown = false;
     this.mousePressed = false;
     this.wheel = 0;
-    this.prevButtons = this.pad ? this.pad.buttons.map((b) => b.pressed || b.value > TRIGGER_THRESHOLD) : [];
+    this.prevButtons = [];
   }
 
   private onKeyDown(event: KeyboardEvent): void {

@@ -196,7 +196,12 @@ export class Level {
       const k = rule.inset ?? 1;
       boxes = [[(-w * k) / 2, (-h * k) / 2, w * k, h * k]];
     }
-    // rotate each box and keep its axis-aligned bounds (exact for multiples of 90°)
+    // Arcade physics only has axis-aligned boxes and circles. Right angles keep exact boxes;
+    // any other rotation becomes a chain of circles along the box's long axis, so a tilted car
+    // blocks where it is drawn instead of a bigger upright box.
+    const offRight = ((Phaser.Math.RadToDeg(a) % 90) + 90) % 90; // degrees past the last right angle
+    const rightAngle = offRight < 2 || offRight > 88;
+    if (!rightAngle) return boxes.flatMap((b) => this.circleChain(b, cx, cy, a, !!rule.low));
     return boxes.map(([bx, by, bw, bh]) => {
       const corners = [[bx, by], [bx + bw, by], [bx, by + bh], [bx + bw, by + bh]].map(([px, py]) => ({
         x: cx + px * Math.cos(a) - py * Math.sin(a),
@@ -206,6 +211,25 @@ export class Level {
       const y0 = Math.min(...corners.map((p) => p.y)), y1 = Math.max(...corners.map((p) => p.y));
       return this.addSolid({ shape: 'rect', x: x0, y: y0, w: x1 - x0, h: y1 - y0, r: 0, low: !!rule.low });
     });
+  }
+
+  /** Overlapping circles covering a rotated local box [bx, by, bw, bh] of a prop centred at (cx, cy). */
+  private circleChain([bx, by, bw, bh]: [number, number, number, number], cx: number, cy: number, a: number, low: boolean): Solid[] {
+    const long = Math.max(bw, bh), short = Math.min(bw, bh);
+    const r = short / 2;
+    const alongX = bw >= bh;
+    const n = Math.max(1, Math.ceil((long - short) / (r * 0.9)) + 1);
+    const out: Solid[] = [];
+    for (let i = 0; i < n; i++) {
+      const t = n === 1 ? 0.5 : i / (n - 1);
+      // centre of this circle in the prop's local space
+      const lx = alongX ? bx + r + t * (long - short) : bx + bw / 2;
+      const ly = alongX ? by + bh / 2 : by + r + t * (long - short);
+      const x = cx + lx * Math.cos(a) - ly * Math.sin(a);
+      const y = cy + lx * Math.sin(a) + ly * Math.cos(a);
+      out.push(this.addSolid({ shape: 'circle', x, y, w: 2 * r, h: 2 * r, r, low }));
+    }
+    return out;
   }
 
   private addSolid(s: Omit<Solid, 'zone'>): Solid {
@@ -232,6 +256,8 @@ export class Level {
   private placeMarker(obj: TiledObject): void {
     if (obj.name === 'player') this.playerStart.set(obj.x, obj.y);
     else if (obj.name === 'boss') this.bossPoint = new Phaser.Math.Vector2(obj.x, obj.y);
+    // impassable area (deep water…): blocks walking and pathing, bullets fly over it
+    else if (obj.name === 'block') this.addSolid({ shape: 'rect', x: obj.x, y: obj.y, w: obj.width, h: obj.height, r: 0, low: true });
     else if (obj.name === 'spawn') this.spawnPoints.push(new Phaser.Math.Vector2(obj.x, obj.y));
     else if (obj.name === 'exit') this.exits.push(new Phaser.Geom.Rectangle(obj.x, obj.y, obj.width, obj.height));
   }

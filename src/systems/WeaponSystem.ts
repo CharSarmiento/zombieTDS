@@ -33,6 +33,8 @@ export interface WeaponStatus {
 const FLAME_TICK = 0.1;
 /** gamepad aim assist: snap to targets within this angle (rad) */
 const ASSIST_ANGLE = Phaser.Math.DegToRad(9);
+/** gamepad: without an assisted target, shots cross the stick line this far from the body */
+const PAD_CONVERGE = 450;
 
 /**
  * Owns weapon selection, ammo, reloading and every attack type: hitscan-free bullets
@@ -178,7 +180,9 @@ export class WeaponSystem {
     this.player.playAttack(anim, w.auto ? undefined : Math.max(w.cooldown, 0.2), !w.auto);
     const tip = this.player.muzzle(anim);
     const spread = Phaser.Math.DegToRad(this.player.moving ? w.spreadMoving : w.spread);
-    const aim = this.assistedAngle(input, w.range);
+    // fire from the barrel straight at the aimed point (cursor, assisted target, or the stick line)
+    const target = this.aimPoint(input, w.range, tip);
+    const aim = Phaser.Math.Angle.Between(tip.x, tip.y, target.x, target.y);
     const angle = aim + Phaser.Math.FloatBetween(-spread / 2, spread / 2);
 
     this.projectiles.fire(tip.x, tip.y, angle, w.bulletSpeed, w.range, w.damage * this.damageMultiplier, w.knockback);
@@ -205,21 +209,29 @@ export class WeaponSystem {
     if (Number.isFinite(a.reserve)) a.reserve -= take;
   }
 
-  /** On gamepad, bends the aim slightly towards a target close to the crosshair line. */
-  private assistedAngle(input: InputFrame, range: number): number {
-    const facing = this.player.facing;
-    if (input.device !== 'pad') return facing;
+  /**
+   * World point the shot should go through.
+   *  - mouse: the cursor (unless it sits on top of the player, then straight ahead)
+   *  - gamepad: a target close to the stick line (light aim assist), otherwise a point on the
+   *    stick line from the body centre, so shots converge where the player is looking
+   */
+  private aimPoint(input: InputFrame, range: number, tip: Phaser.Math.Vector2): Phaser.Math.Vector2 {
+    const p = this.player;
+    const ahead = (d: number) => new Phaser.Math.Vector2(p.x + Math.cos(p.facing) * d, p.y + Math.sin(p.facing) * d);
+    if (input.aimWorld) {
+      const tooClose = Phaser.Math.Distance.Between(p.x, p.y, input.aimWorld.x, input.aimWorld.y) < Phaser.Math.Distance.Between(p.x, p.y, tip.x, tip.y) + 30;
+      return tooClose ? ahead(PAD_CONVERGE) : input.aimWorld;
+    }
     let best = ASSIST_ANGLE;
-    let result = facing;
+    let result = ahead(PAD_CONVERGE);
     for (const t of this.targets()) {
       if (!t.alive) continue;
-      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, t.x, t.y);
+      const d = Phaser.Math.Distance.Between(p.x, p.y, t.x, t.y);
       if (d > range) continue;
-      const ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, t.x, t.y);
-      const diff = Math.abs(Phaser.Math.Angle.Wrap(ang - facing));
+      const diff = Math.abs(Phaser.Math.Angle.Wrap(Phaser.Math.Angle.Between(p.x, p.y, t.x, t.y) - p.facing));
       if (diff < best) {
         best = diff;
-        result = ang;
+        result = new Phaser.Math.Vector2(t.x, t.y);
       }
     }
     return result;

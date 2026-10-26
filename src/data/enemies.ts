@@ -96,7 +96,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
 
   // --- bosses -------------------------------------------------------------------------------
   boss1: {
-    name: 'El Cosido', tier: 4, hp: 3200, speed: 95, radius: 72, mass: 12, knockbackResist: 1, stagger: 0,
+    name: 'El Cosido', tier: 4, hp: 4200, speed: 95, radius: 72, mass: 12, knockbackResist: 1, stagger: 0,
     reward: 20, coins: 10,
     attacks: [
       { anim: 'attack1', range: 110, shape: { type: 'arc', radius: 270, angle: 300 }, damage: 30, hitAt: 0.45, duration: 1.4, cooldown: 2.4, knockback: 520, telegraph: true },
@@ -104,7 +104,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     ],
   },
   boss2: {
-    name: 'La Tenaza', tier: 4, hp: 3800, speed: 100, radius: 75, mass: 12, knockbackResist: 1, stagger: 0,
+    name: 'La Tenaza', tier: 4, hp: 5200, speed: 100, radius: 75, mass: 12, knockbackResist: 1, stagger: 0,
     reward: 20, coins: 12,
     attacks: [
       { anim: 'attack1', range: 100, shape: { type: 'arc', radius: 240, angle: 150 }, damage: 36, hitAt: 0.5, duration: 1.0, cooldown: 2, knockback: 500, telegraph: true },
@@ -113,7 +113,7 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
     ],
   },
   megaboss: {
-    name: 'La Abominación', tier: 5, hp: 10000, speed: 82, radius: 105, mass: 40, knockbackResist: 1, stagger: 0,
+    name: 'La Abominación', tier: 5, hp: 13000, speed: 82, radius: 105, mass: 40, knockbackResist: 1, stagger: 0,
     reward: 25, coins: 24,
     attacks: [
       { anim: 'attack1', range: 140, shape: { type: 'arc', radius: 340, angle: 360 }, damage: 34, hitAt: 0.5, duration: 1.7, cooldown: 3, knockback: 600, telegraph: true },
