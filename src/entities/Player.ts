@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { getManifest } from '../assets/manifest';
 import type { Hit } from '../combat/types';
+import { BUFF_EFFECT, BUFFS, type BuffId } from '../data/pickups';
 import { CHARACTERS, PLAYER, type CharacterId } from '../data/player';
 import { WEAPONS, type WeaponId } from '../data/weapons';
 import type { InputFrame } from '../systems/InputManager';
@@ -21,6 +22,8 @@ export class Player extends Actor {
   armor = 0;
   maxArmor = PLAYER.maxArmor;
   alive = true;
+  /** seconds left on each power-up */
+  readonly buffs: Record<BuffId, number> = { speed: 0, slow: 0, superpower: 0 };
   private invulnerableUntil = 0;
   private hurtFlashUntil = 0;
   /** an attack animation owns the sprite; walk/idle updates wait until it ends */
@@ -42,6 +45,7 @@ export class Player extends Actor {
   update(input: InputFrame, dt: number): void {
     this.updateHurtVisuals();
     if (!this.alive) return;
+    for (const id of Object.keys(this.buffs) as BuffId[]) this.buffs[id] = Math.max(0, this.buffs[id] - dt);
     this.updateMovement(input, dt);
     this.updateAim(input, dt);
     this.refreshAnim();
@@ -69,6 +73,15 @@ export class Player extends Actor {
     if (this.alive) this.hp = Math.min(this.maxHp, this.hp + amount);
   }
 
+  addArmor(amount: number): void {
+    if (this.alive) this.armor = Math.min(this.maxArmor, this.armor + amount);
+  }
+
+  /** Starts (or refreshes) a timed power-up. */
+  addBuff(id: BuffId): void {
+    this.buffs[id] = BUFFS[id].seconds;
+  }
+
   private die(): void {
     this.alive = false;
     this.attacking = false;
@@ -84,6 +97,7 @@ export class Player extends Actor {
   private updateHurtVisuals(): void {
     const now = this.scene.time.now;
     if (now < this.hurtFlashUntil) this.sprite.setTint(0xff5050);
+    else if (this.buffs.superpower > 0) this.sprite.setTint(Math.floor(now / 150) % 2 ? 0xffe080 : 0xffc040);
     else this.sprite.clearTint();
     const blinking = this.alive && now < this.invulnerableUntil;
     this.sprite.setAlpha(blinking && Math.floor(now / 70) % 2 === 0 ? 0.55 : 1);
@@ -138,7 +152,8 @@ export class Player extends Actor {
   }
 
   private updateMovement(input: InputFrame, dt: number): void {
-    const speed = PLAYER.walkSpeed * (input.sprint ? PLAYER.sprintMultiplier : 1);
+    const boost = this.buffs.speed > 0 ? BUFF_EFFECT.speedMultiplier : 1;
+    const speed = PLAYER.walkSpeed * (input.sprint ? PLAYER.sprintMultiplier : 1) * boost;
     const t = 1 - Math.exp(-PLAYER.acceleration * dt);
     const v = this.body.velocity;
     this.body.setVelocity(

@@ -23,6 +23,7 @@ type State = 'chase' | 'attack' | 'stagger' | 'dead';
 const TURN_SPEED = 7;
 const ACCEL = 6;
 const BURN_TINT = 0xff8840;
+const SLOW_TINT = 0xa8c8ff;
 const CORPSE_MS = 9000;
 /** speed factor while off-screen */
 const CATCH_UP_MULTIPLIER = 2.2;
@@ -213,6 +214,7 @@ export class Zombie extends Actor implements Damageable {
   private updateTint(): void {
     if (this.scene.time.now < this.flashUntil) this.sprite.setTintFill(0xffffff);
     else if (this.burnLeft > 0 && this.alive) this.sprite.setTint(BURN_TINT);
+    else if (this.alive && this.ctx.speedMultiplier() < 1) this.sprite.setTint(SLOW_TINT);
     else this.sprite.clearTint();
   }
 

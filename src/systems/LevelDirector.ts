@@ -1,0 +1,189 @@
+import Phaser from 'phaser';
+import type { EnemyId } from '../data/enemies';
+import type { LevelDef, LevelStep, Trickle, Wave } from '../data/levels';
+import { pickWeighted, type SpawnPicker } from './SpawnPicker';
+
+/** What the director needs from the scene. */
+export interface DirectorContext {
+  picker: SpawnPicker;
+  spawn: (kind: EnemyId, x: number, y: number) => void;
+  aliveCount: () => number;
+  /** true while the player stands in the named marker area */
+  playerIn: (marker: string) => boolean;
+}
+
+/** HUD-facing state of the current objective. */
+export interface ObjectiveStatus {
+  title: string;
+  detail: string;
+  /** 0..1 or null when there is no meaningful progress bar */
+  progress: number | null;
+  /** marker the player must reach (for the HUD arrow), if any */
+  target: string | null;
+}
+
+/**
+ * Runs a level's objective steps in order: wave batches with breaks, survival timers and
+ * reach-the-exit goals, spawning enemies as each step dictates.
+ * Emits 'banner' (title, subtitle) for big announcements and 'complete' when the level is won.
+ */
+export class LevelDirector {
+  readonly events = new Phaser.Events.EventEmitter();
+  private stepIndex = -1;
+  private waveIndex = 0;
+  private queue: EnemyId[] = [];
+  private waveTotal = 0;
+  private breakLeft = 0;
+  private spawnTimer = 0;
+  private stepTime = 0;
+  private done = false;
+
+  constructor(
+    private def: LevelDef,
+    private ctx: DirectorContext,
+  ) {}
+
+  /** Starts the first step (call once the scene is ready). */
+  start(): void {
+    this.nextStep();
+  }
+
+  get finished(): boolean {
+    return this.done;
+  }
+
+  private get step(): LevelStep | undefined {
+    return this.def.steps[this.stepIndex];
+  }
+
+  update(dt: number): void {
+    const step = this.step;
+    if (!step || this.done) return;
+    this.stepTime += dt;
+    switch (step.type) {
+      case 'waves':
+        this.updateWaves(step.waves, step.breakTime, dt);
+        break;
+      case 'survive':
+        this.trickle(step.trickle, dt);
+        if (this.stepTime >= step.seconds) this.nextStep();
+        break;
+      case 'reach':
+        if (step.trickle) this.trickle(step.trickle, dt);
+        if (this.ctx.playerIn(step.marker)) this.nextStep();
+        break;
+    }
+  }
+
+  get status(): ObjectiveStatus {
+    const step = this.step;
+    if (!step || this.done) return { title: '¡NIVEL COMPLETADO!', detail: '', progress: 1, target: null };
+    switch (step.type) {
+      case 'waves': {
+        const n = step.waves.length;
+        if (this.breakLeft > 0) {
+          return { title: `OLEADA ${this.waveIndex + 1} / ${n}`, detail: `Prepárate… ${Math.ceil(this.breakLeft)}`, progress: null, target: null };
+        }
+        const left = this.queue.length + this.ctx.aliveCount();
+        return {
+          title: `OLEADA ${this.waveIndex + 1} / ${n}`,
+          detail: `Zombies restantes: ${left}`,
+          progress: this.waveTotal ? 1 - left / this.waveTotal : 0,
+          target: null,
+        };
+      }
+      case 'survive': {
+        const s = Math.ceil(Math.max(0, step.seconds - this.stepTime));
+        return { title: 'SOBREVIVE', detail: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, progress: this.stepTime / step.seconds, target: null };
+      }
+      case 'reach':
+        return { title: 'LLEGA A LA SALIDA', detail: 'Sigue la flecha', progress: null, target: step.marker };
+    }
+  }
+
+  /** Dev: completes the current step at once. */
+  skipStep(): void {
+    this.queue = [];
+    this.nextStep();
+  }
+
+  /** Dev: spawns `n` extra walkers. */
+  burst(n: number): void {
+    for (let i = 0; i < n; i++) this.spawnOne(pickWeighted<EnemyId>([['zombie1', 1], ['zombie3', 1], ['cop', 1]]));
+  }
+
+  // --- steps --------------------------------------------------------------------------------
+
+  private nextStep(): void {
+    this.stepIndex++;
+    this.stepTime = 0;
+    this.spawnTimer = 0;
+    const step = this.step;
+    if (!step) {
+      this.done = true;
+      this.events.emit('complete');
+      return;
+    }
+    switch (step.type) {
+      case 'waves':
+        this.waveIndex = 0;
+        this.beginBreak(step, 2.5);
+        break;
+      case 'survive':
+        this.events.emit('banner', 'SOBREVIVE', `${step.seconds} segundos`);
+        break;
+      case 'reach':
+        this.events.emit('banner', '¡ZONA DESPEJADA!', 'Llega a la salida');
+        break;
+    }
+  }
+
+  private beginBreak(step: Extract<LevelStep, { type: 'waves' }>, seconds = step.breakTime): void {
+    this.breakLeft = seconds;
+    this.queue = [];
+  }
+
+  private updateWaves(waves: Wave[], breakTime: number, dt: number): void {
+    if (this.breakLeft > 0) {
+      this.breakLeft -= dt;
+      if (this.breakLeft <= 0) this.startWave(waves[this.waveIndex], waves.length);
+      return;
+    }
+    const wave = waves[this.waveIndex];
+    this.spawnTimer -= dt;
+    if (this.queue.length && this.spawnTimer <= 0 && this.ctx.aliveCount() < wave.maxAlive) {
+      this.spawnTimer = wave.interval;
+      this.spawnOne(this.queue.pop()!);
+    }
+    if (!this.queue.length && this.ctx.aliveCount() === 0) {
+      this.waveIndex++;
+      if (this.waveIndex >= waves.length) this.nextStep();
+      else {
+        this.events.emit('banner', '¡OLEADA SUPERADA!', `Siguiente en ${breakTime} s`);
+        this.breakLeft = breakTime;
+      }
+    }
+  }
+
+  private startWave(wave: Wave, total: number): void {
+    const list: EnemyId[] = [];
+    for (const [kind, n] of Object.entries(wave.spawn) as [EnemyId, number][]) for (let i = 0; i < n; i++) list.push(kind);
+    this.queue = Phaser.Utils.Array.Shuffle(list);
+    this.waveTotal = list.length;
+    this.spawnTimer = 0;
+    this.events.emit('banner', `OLEADA ${this.waveIndex + 1}`, this.waveIndex + 1 === total ? 'La última' : `de ${total}`);
+  }
+
+  private trickle(t: Trickle, dt: number): void {
+    this.spawnTimer -= dt;
+    if (this.spawnTimer > 0 || this.ctx.aliveCount() >= t.maxAlive) return;
+    this.spawnTimer = t.interval;
+    this.spawnOne(pickWeighted(Object.entries(t.weights) as [EnemyId, number][]));
+  }
+
+  private spawnOne(kind: EnemyId): void {
+    const p = this.ctx.picker.pick();
+    if (p) this.ctx.spawn(kind, p.x, p.y);
+    else this.queue.push(kind); // no free spot this frame: retry later
+  }
+}

@@ -44,6 +44,8 @@ export class InputManager {
   device: Device = 'kbm';
   private keys: Record<string, Phaser.Input.Keyboard.Key>;
   private wheel = 0;
+  /** key codes pressed since the last update */
+  private tapped = new Set<number>();
   private mouseDown = false;
   private mousePressed = false;
   private prevButtons: boolean[] = [];
@@ -83,7 +85,8 @@ export class InputManager {
     if (pad && (left.lengthSq() > 0 || right.lengthSq() > 0 || pad.buttons.some((b) => b.pressed))) this.device = 'pad';
 
     const k = this.keys;
-    const jd = (name: string) => Phaser.Input.Keyboard.JustDown(k[name]);
+    // pressed since the last frame, from keydown events: never misses a tap shorter than a frame
+    const jd = (name: string) => this.tapped.has(k[name].keyCode);
 
     // --- keyboard + mouse
     const kbMove = new Phaser.Math.Vector2(
@@ -125,11 +128,23 @@ export class InputManager {
     this.prevButtons = pad ? pad.buttons.map((b, i) => (i === BTN.RT ? b.value > TRIGGER_THRESHOLD : b.pressed)) : [];
     this.wheel = 0;
     this.mousePressed = false;
+    this.tapped.clear();
     return frame;
   }
 
-  private onKeyDown(): void {
+  /** Forgets held/pressed state (after the scene was paused, so no press leaks through). */
+  reset(): void {
+    this.scene.input.keyboard?.resetKeys();
+    this.tapped.clear();
+    this.mouseDown = false;
+    this.mousePressed = false;
+    this.wheel = 0;
+    this.prevButtons = this.pad ? this.pad.buttons.map((b) => b.pressed || b.value > TRIGGER_THRESHOLD) : [];
+  }
+
+  private onKeyDown(event: KeyboardEvent): void {
     this.device = 'kbm';
+    if (!event.repeat) this.tapped.add(event.keyCode);
   }
 
   private onWheel(_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number): void {

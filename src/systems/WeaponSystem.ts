@@ -105,7 +105,19 @@ export class WeaponSystem {
     };
   }
 
-  /** Fills every weapon (ammo pickups, debug). */
+  /** Adds reserve ammo to a gun (capped at its maximum). */
+  addAmmo(id: WeaponId, amount: number): void {
+    const w = WEAPONS[id];
+    if (w.kind === 'gun') this.ammo[id].reserve = Math.min(w.maxReserve, this.ammo[id].reserve + amount);
+  }
+
+  /** Adds fuel to the flamethrower (capped at the tank size). */
+  addFuel(amount: number): void {
+    const w = WEAPONS.flame;
+    if (w.kind === 'flame') this.ammo.flame.fuel = Math.min(w.fuel, this.ammo.flame.fuel + amount);
+  }
+
+  /** Fills every weapon (debug). */
   refillAll(): void {
     for (const id of WEAPON_ORDER) {
       const w = WEAPONS[id];

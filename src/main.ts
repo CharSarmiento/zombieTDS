@@ -4,7 +4,9 @@ import { AnimPreviewScene } from './scenes/AnimPreviewScene';
 import { BootScene } from './scenes/BootScene';
 import { CharacterSelectScene } from './scenes/CharacterSelectScene';
 import { GameScene } from './scenes/GameScene';
+import { PauseScene } from './scenes/PauseScene';
 import { PreloadScene } from './scenes/PreloadScene';
+import { ResultsScene } from './scenes/ResultsScene';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -22,7 +24,7 @@ const game = new Phaser.Game({
     default: 'arcade',
     arcade: { debug: false },
   },
-  scene: [BootScene, PreloadScene, CharacterSelectScene, GameScene, AnimPreviewScene],
+  scene: [BootScene, PreloadScene, CharacterSelectScene, GameScene, PauseScene, ResultsScene, AnimPreviewScene],
 });
 
 // dev: expose the game for debugging and automated checks from the browser console
