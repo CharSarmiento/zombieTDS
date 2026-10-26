@@ -64,6 +64,7 @@ export class LevelDirector {
 
   /** Starts the first step (call once the scene is ready). */
   start(): void {
+    if (this.stepIndex >= 0) return; // already running (e.g. a step was skipped with F5 before the start)
     this.nextStep();
   }
 

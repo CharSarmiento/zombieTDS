@@ -351,7 +351,11 @@ export class Zombie extends Actor implements Damageable {
   }
 
   private updateTint(): void {
-    if (this.scene.time.now < this.flashUntil) this.sprite.setTintFill(0xffffff);
+    // big enemies take hits constantly: a soft red tint instead of a white silhouette
+    if (this.scene.time.now < this.flashUntil) {
+      if (this.def.tier >= 3) this.sprite.setTint(0xff9090);
+      else this.sprite.setTintFill(0xffffff);
+    }
     else if (this.burnLeft > 0 && this.alive) this.sprite.setTint(BURN_TINT);
     else if (this.alive && this.ctx.speedMultiplier() < 1) this.sprite.setTint(SLOW_TINT);
     else if (this.alive && this.rage > 1) this.sprite.setTint(0xffa0a0);
