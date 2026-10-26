@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import type { Damageable } from '../combat/types';
 import { DEPTH } from '../entities/Actor';
 import type { Player } from '../entities/Player';
-import { WEAPON_ORDER, WEAPONS, type FlameWeapon, type GunWeapon, type MeleeWeapon, type WeaponId } from '../data/weapons';
+import type { Loadout } from '../data/progression';
+import { WEAPON_ORDER, type FlameWeapon, type GunWeapon, type MeleeWeapon, type WeaponDef, type WeaponId } from '../data/weapons';
 import type { Fx } from './Fx';
 import type { InputFrame } from './InputManager';
 import type { Projectiles } from './Projectiles';
@@ -38,8 +39,12 @@ const ASSIST_ANGLE = Phaser.Math.DegToRad(9);
  * (via Projectiles), melee arcs timed to the swing art, and the flamethrower cone.
  */
 export class WeaponSystem {
-  /** multiplies all damage (skills / superpower pickups later) */
+  /** multiplies all damage (strength skill × double-damage pickup) */
   damageMultiplier = 1;
+  /** this run's weapon stats (upgrades and skills applied) */
+  private defs: Record<WeaponId, WeaponDef>;
+  /** weapons the player owns, in slot order */
+  private owned: WeaponId[];
   private ammo = {} as Record<WeaponId, AmmoState>;
   private cooldown = 0;
   private reloadLeft = 0;
@@ -53,9 +58,13 @@ export class WeaponSystem {
     private projectiles: Projectiles,
     private fx: Fx,
     private targets: () => readonly Damageable[],
+    loadout: Loadout,
   ) {
+    this.defs = loadout.weapons;
+    this.owned = loadout.owned;
+    if (!this.owned.includes(player.weapon)) player.weapon = this.owned.includes('gun') ? 'gun' : this.owned[0];
     for (const id of WEAPON_ORDER) {
-      const w = WEAPONS[id];
+      const w = this.defs[id];
       this.ammo[id] = {
         mag: w.kind === 'gun' ? w.magazine : 0,
         reserve: w.kind === 'gun' ? w.reserve : 0,
@@ -67,7 +76,7 @@ export class WeaponSystem {
   update(input: InputFrame, dt: number): void {
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.updateSelection(input);
-    const w = WEAPONS[this.player.weapon];
+    const w = this.defs[this.player.weapon];
 
     if (this.reloadLeft > 0) {
       this.reloadLeft -= dt;
@@ -90,7 +99,7 @@ export class WeaponSystem {
 
   get status(): WeaponStatus {
     const id = this.player.weapon;
-    const w = WEAPONS[id];
+    const w = this.defs[id];
     const a = this.ammo[id];
     return {
       id,
@@ -107,20 +116,25 @@ export class WeaponSystem {
 
   /** Adds reserve ammo to a gun (capped at its maximum). */
   addAmmo(id: WeaponId, amount: number): void {
-    const w = WEAPONS[id];
+    const w = this.defs[id];
     if (w.kind === 'gun') this.ammo[id].reserve = Math.min(w.maxReserve, this.ammo[id].reserve + amount);
   }
 
   /** Adds fuel to the flamethrower (capped at the tank size). */
   addFuel(amount: number): void {
-    const w = WEAPONS.flame;
+    const w = this.defs.flame;
     if (w.kind === 'flame') this.ammo.flame.fuel = Math.min(w.fuel, this.ammo.flame.fuel + amount);
+  }
+
+  /** Owned weapons in slot order (HUD). */
+  get ownedWeapons(): readonly WeaponId[] {
+    return this.owned;
   }
 
   /** Fills every weapon (debug). */
   refillAll(): void {
     for (const id of WEAPON_ORDER) {
-      const w = WEAPONS[id];
+      const w = this.defs[id];
       if (w.kind === 'gun') {
         this.ammo[id].mag = w.magazine;
         this.ammo[id].reserve = w.maxReserve;
@@ -132,10 +146,14 @@ export class WeaponSystem {
   // --- selection --------------------------------------------------------------------------
 
   private updateSelection(input: InputFrame): void {
-    let idx = WEAPON_ORDER.indexOf(this.player.weapon);
-    if (input.weaponSlot !== null && input.weaponSlot < WEAPON_ORDER.length) idx = input.weaponSlot;
-    else if (input.weaponDelta) idx = Phaser.Math.Wrap(idx + input.weaponDelta, 0, WEAPON_ORDER.length);
-    const next = WEAPON_ORDER[idx];
+    let next = this.player.weapon;
+    // number keys keep a fixed slot per weapon (4 is always the rifle); unowned slots do nothing
+    const slotted = input.weaponSlot !== null ? WEAPON_ORDER[input.weaponSlot] : undefined;
+    if (slotted && this.owned.includes(slotted)) next = slotted;
+    else if (input.weaponDelta) {
+      const idx = this.owned.indexOf(this.player.weapon);
+      next = this.owned[Phaser.Math.Wrap(idx + input.weaponDelta, 0, this.owned.length)];
+    }
     if (next === this.player.weapon) return;
     // switching cancels a reload or a flame stream
     this.reloadLeft = 0;
@@ -170,7 +188,7 @@ export class WeaponSystem {
   }
 
   private startReload(): void {
-    const w = WEAPONS[this.player.weapon];
+    const w = this.defs[this.player.weapon];
     if (w.kind !== 'gun' || this.reloadLeft > 0) return;
     const a = this.ammo[this.player.weapon];
     if (a.mag >= w.magazine || a.reserve <= 0) return;
@@ -179,7 +197,7 @@ export class WeaponSystem {
 
   private finishReload(): void {
     this.reloadLeft = 0;
-    const w = WEAPONS[this.player.weapon];
+    const w = this.defs[this.player.weapon];
     if (w.kind !== 'gun') return;
     const a = this.ammo[this.player.weapon];
     const take = Math.min(w.magazine - a.mag, a.reserve);

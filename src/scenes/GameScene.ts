@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import type { Damageable } from '../combat/types';
 import type { EnemyId } from '../data/enemies';
-import { LEVELS, type LevelDef } from '../data/levels';
+import { findLevel, type LevelDef } from '../data/levels';
 import { BUFF_EFFECT } from '../data/pickups';
 import { CAMERA } from '../data/player';
+import { computeLoadout, type Loadout } from '../data/progression';
 import { WEAPON_ORDER, WEAPONS, type WeaponId } from '../data/weapons';
 import { DEPTH } from '../entities/Actor';
 import { Barrel, EXPLOSION } from '../entities/Barrel';
@@ -34,6 +35,7 @@ const DEATH_KEEP = 0.5;
  */
 export class GameScene extends Phaser.Scene {
   private def!: LevelDef;
+  private loadout!: Loadout;
   private controls!: InputManager;
   private level!: Level;
   private player!: Player;
@@ -72,19 +74,22 @@ export class GameScene extends Phaser.Scene {
     this.ended = false;
     this.controls = new InputManager(this);
 
-    this.def = LEVELS.find((l) => l.id === data.level) ?? LEVELS[0];
+    this.def = findLevel(data.level ?? (import.meta.env.DEV ? new URLSearchParams(location.search).get('level') ?? undefined : undefined));
     this.level = new Level(this, this.def.map);
     const { width, height } = this.level;
     this.physics.world.setBounds(0, 0, width, height);
 
-    this.player = new Player(this, this.level.playerStart.x, this.level.playerStart.y, loadSave().character);
+    const save = loadSave();
+    this.loadout = computeLoadout(save);
+    this.player = new Player(this, this.level.playerStart.x, this.level.playerStart.y, save.character);
+    this.player.applyStats(this.loadout);
     this.player.body.setMass(1.5);
     this.physics.add.collider(this.player.root, this.level.statics);
 
     this.fx = new Fx(this);
     const targets = () => this.targets;
     this.projectiles = new Projectiles(this, this.fx, targets, (x0, y0, dx, dy) => this.level.raycast(x0, y0, dx, dy));
-    this.weapons = new WeaponSystem(this, this.player, this.projectiles, this.fx, targets);
+    this.weapons = new WeaponSystem(this, this.player, this.projectiles, this.fx, targets, this.loadout);
     this.pickups = new Pickups(this, this.player, this.weapons);
     this.barrels = this.level.explosives.map((p) => new Barrel(this, this.level, p, (b) => this.explode(b.x, b.y)));
 
@@ -115,6 +120,15 @@ export class GameScene extends Phaser.Scene {
     this.director = new LevelDirector(this.def, {
       picker,
       spawn: (kind, x, y) => this.spawnZombie(kind, x, y),
+      freeNear: (x, y, minR, maxR) => {
+        for (let i = 0; i < 12; i++) {
+          const a = Math.random() * Math.PI * 2, r = Phaser.Math.Between(minR, maxR);
+          const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+          if (px > 60 && py > 60 && px < width - 60 && py < height - 60 && !this.level.field.isBlockedAt(px, py)) return new Phaser.Math.Vector2(px, py);
+        }
+        return null;
+      },
+      bossPoint: this.level.bossPoint,
       aliveCount: () => this.zombies.filter((z) => z.alive).length,
       playerIn: (marker) => (marker === 'exit' ? this.level.exits : []).some((r) => r.contains(this.player.x, this.player.y)),
     });
@@ -161,7 +175,7 @@ export class GameScene extends Phaser.Scene {
 
     if (!this.ended) this.elapsed += dt;
     this.targets = [...this.zombies, ...this.barrels];
-    this.weapons.damageMultiplier = this.player.buffs.superpower > 0 ? BUFF_EFFECT.damageMultiplier : 1;
+    this.weapons.damageMultiplier = this.loadout.damageMultiplier * (this.player.buffs.superpower > 0 ? BUFF_EFFECT.damageMultiplier : 1);
     this.player.update(input, dt);
     if (this.player.alive) {
       this.weapons.update(input, dt);
@@ -184,10 +198,11 @@ export class GameScene extends Phaser.Scene {
     this.devText?.setText(`${Math.round(this.game.loop.actualFps)} fps · zombies ${this.zombies.filter((z) => z.alive).length} · F1 hitbox · F2 munición · F3 +10 · F4 matar todos · F5 saltar objetivo`);
   }
 
-  private spawnZombie(kind: EnemyId, x: number, y: number): void {
+  private spawnZombie(kind: EnemyId, x: number, y: number): Zombie {
     const z = new Zombie(this, x, y, kind, this.zombieCtx);
     this.zombies.push(z);
     this.zombieGroup.add(z.root);
+    return z;
   }
 
   private onLevelComplete(): void {
@@ -290,7 +305,7 @@ export class GameScene extends Phaser.Scene {
     const params = new URLSearchParams(location.search);
     if (params.has('god')) this.player.hp = this.player.maxHp;
     const demo = params.get('demo') as WeaponId | null;
-    if (!demo || !WEAPONS[demo]) return;
+    if (!demo || !WEAPONS[demo] || !this.weapons.ownedWeapons.includes(demo)) return;
     this.player.hp = this.player.maxHp;
     if (this.player.weapon !== demo) input.weaponSlot = WEAPON_ORDER.indexOf(demo);
     const dist = (z: Zombie) => Phaser.Math.Distance.Between(z.x, z.y, this.player.x, this.player.y);

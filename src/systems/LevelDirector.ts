@@ -1,12 +1,27 @@
 import Phaser from 'phaser';
 import type { EnemyId } from '../data/enemies';
-import type { LevelDef, LevelStep, Trickle, Wave } from '../data/levels';
+import type { BossStep, LevelDef, LevelStep, Trickle, Wave } from '../data/levels';
 import { pickWeighted, type SpawnPicker } from './SpawnPicker';
 
 /** What the director needs from the scene. */
+/** What the director tracks of a spawned boss. */
+export interface BossHandle {
+  readonly hp: number;
+  readonly maxHp: number;
+  readonly alive: boolean;
+  readonly x: number;
+  readonly y: number;
+  readonly def: { name: string };
+  enrage(multiplier: number): void;
+}
+
 export interface DirectorContext {
   picker: SpawnPicker;
-  spawn: (kind: EnemyId, x: number, y: number) => void;
+  spawn: (kind: EnemyId, x: number, y: number) => BossHandle;
+  /** free spot around a point (escorts and summons appear next to the boss) */
+  freeNear: (x: number, y: number, minR: number, maxR: number) => Phaser.Math.Vector2 | null;
+  /** boss start marker of the map, if any */
+  bossPoint: Phaser.Math.Vector2 | null;
   aliveCount: () => number;
   /** true while the player stands in the named marker area */
   playerIn: (marker: string) => boolean;
@@ -20,6 +35,8 @@ export interface ObjectiveStatus {
   progress: number | null;
   /** marker the player must reach (for the HUD arrow), if any */
   target: string | null;
+  /** progress bar colour (boss health is red) */
+  color?: number;
 }
 
 /**
@@ -37,6 +54,8 @@ export class LevelDirector {
   private spawnTimer = 0;
   private stepTime = 0;
   private done = false;
+  private boss?: BossHandle;
+  private phase = 0;
 
   constructor(
     private def: LevelDef,
@@ -72,6 +91,40 @@ export class LevelDirector {
         if (step.trickle) this.trickle(step.trickle, dt);
         if (this.ctx.playerIn(step.marker)) this.nextStep();
         break;
+      case 'boss':
+        this.updateBoss(step, dt);
+        break;
+    }
+  }
+
+  private updateBoss(step: BossStep, dt: number): void {
+    // the queue holds escorts/summons that found no free spot yet
+    if (this.queue.length) this.spawnAround(this.queue.splice(0));
+    const b = this.boss;
+    if (!b) return;
+    if (!b.alive) {
+      this.events.emit('banner', '¡JEFE ABATIDO!', b.def.name);
+      this.boss = undefined;
+      this.nextStep();
+      return;
+    }
+    this.trickle(step.trickle, dt);
+    const next = step.phases[this.phase];
+    if (next && b.hp / b.maxHp <= next.at) {
+      this.phase++;
+      b.enrage(next.enrage);
+      this.events.emit('banner', '¡REFUERZOS!', `${b.def.name} está furioso`);
+      this.spawnAround(expand(next.summon));
+    }
+  }
+
+  /** Spawns enemies in a ring around the boss (falls back to normal spawn points). */
+  private spawnAround(kinds: EnemyId[]): void {
+    const b = this.boss;
+    for (const kind of kinds) {
+      const p = b ? this.ctx.freeNear(b.x, b.y, 180, 380) : null;
+      if (p) this.ctx.spawn(kind, p.x, p.y);
+      else this.spawnOne(kind);
     }
   }
 
@@ -98,6 +151,17 @@ export class LevelDirector {
       }
       case 'reach':
         return { title: 'LLEGA A LA SALIDA', detail: 'Sigue la flecha', progress: null, target: step.marker };
+      case 'boss': {
+        const b = this.boss;
+        if (!b) return { title: 'JEFE', detail: '', progress: null, target: null };
+        return {
+          title: b.def.name.toUpperCase(),
+          detail: `Fase ${this.phase + 1} / ${step.phases.length + 1}`,
+          progress: Math.max(0, b.hp / b.maxHp),
+          target: null,
+          color: 0xd02a2a,
+        };
+      }
     }
   }
 
@@ -135,6 +199,15 @@ export class LevelDirector {
       case 'reach':
         this.events.emit('banner', '¡ZONA DESPEJADA!', 'Llega a la salida');
         break;
+      case 'boss': {
+        this.phase = 0;
+        const p = this.ctx.bossPoint ?? this.ctx.picker.pick();
+        if (!p) break;
+        this.boss = this.ctx.spawn(step.boss, p.x, p.y);
+        this.events.emit('banner', this.boss.def.name.toUpperCase(), '¡Ha llegado un jefe!');
+        this.spawnAround(expand(step.escort));
+        break;
+      }
     }
   }
 
@@ -166,8 +239,7 @@ export class LevelDirector {
   }
 
   private startWave(wave: Wave, total: number): void {
-    const list: EnemyId[] = [];
-    for (const [kind, n] of Object.entries(wave.spawn) as [EnemyId, number][]) for (let i = 0; i < n; i++) list.push(kind);
+    const list = expand(wave.spawn);
     this.queue = Phaser.Utils.Array.Shuffle(list);
     this.waveTotal = list.length;
     this.spawnTimer = 0;
@@ -186,4 +258,11 @@ export class LevelDirector {
     if (p) this.ctx.spawn(kind, p.x, p.y);
     else this.queue.push(kind); // no free spot this frame: retry later
   }
+}
+
+/** { zombie1: 2, cop: 1 } -> ['zombie1', 'zombie1', 'cop'] */
+function expand(counts: Partial<Record<EnemyId, number>>): EnemyId[] {
+  const list: EnemyId[] = [];
+  for (const [kind, n] of Object.entries(counts) as [EnemyId, number][]) for (let i = 0; i < n; i++) list.push(kind);
+  return list;
 }

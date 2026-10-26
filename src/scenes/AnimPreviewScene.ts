@@ -55,7 +55,7 @@ export class AnimPreviewScene extends Phaser.Scene {
     kb.on('keydown-LEFT', () => this.step(0, -1));
     kb.on('keydown-RIGHT', () => this.step(0, 1));
     kb.on('keydown-R', () => (this.rotate = !this.rotate));
-    kb.on('keydown-ESC', () => this.scene.start('CharacterSelect'));
+    kb.on('keydown-ESC', () => this.scene.start('MainMenu'));
     kb.on('keydown-Z', () => {
       this.zoom = this.zoom === 1 ? 2 : 1;
       this.rebuild();

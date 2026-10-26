@@ -227,6 +227,30 @@ const LEVELS = {
   },
 };
 
+/** Open plaza for boss fights: wide space to dodge, scattered cover and explosive barrels. */
+LEVELS.arena = () => {
+  const m = new MapBuilder('arena', 44, 32);
+  m.seed = 77;
+  m.fill('ground/12');
+  m.fill('asphalt/12', 6, 5, 32, 22);
+  m.fill('grass/00', 0, 0, 44, 3);
+  m.fill('grass/00', 0, 29, 44, 3);
+  // cover: wrecks around the plaza, barrels between them
+  m.prop(o(16), 1100, 900, 20); m.prop(o(17), 3300, 950, -15); m.prop(o(18), 1050, 2300, 80);
+  m.prop(o(19), 3350, 2250, -70); m.prop('outside/tank', 2200, 600, 90);
+  for (const [x, y] of [[1500, 1300], [2900, 1300], [1500, 1950], [2900, 1950], [2200, 2500]]) m.prop(o(13), x, y);
+  for (const [x, y] of [[1560, 1340], [2840, 1960], [700, 1600], [3700, 1600]]) m.prop(o(12), x, y);
+  for (const [f, x, y] of [[0, 700, 700], [1, 3700, 700], [2, 700, 2600], [0, 3700, 2600]]) m.prop(o(f), x, y);
+  for (const [f, x, y] of [[9, 250, 150], [10, 4150, 200], [11, 250, 3050], [9, 4150, 3000], [10, 2200, 3100]]) m.prop(o(f), x, y);
+  m.scatter(['crack_asphalt'], 40, 650, 550, 3150, 2150);
+  m.scatter(['water_spot'], 14, 650, 550, 3150, 2150);
+  m.scatter(['leaf', 'crack_ground'], 60, 0, 0, 4400, 3200);
+  m.marker('player', 2200, 2350);
+  m.marker('boss', 2200, 1000);
+  for (const [x, y] of [[100, 1600], [4300, 1600], [2200, 80], [2200, 3120], [150, 150], [4250, 150], [150, 3050], [4250, 3050]]) m.marker('spawn', x, y);
+  return m;
+};
+
 const force = process.argv.includes('--force');
 const outDir = path.join(ROOT, 'public', 'maps');
 fs.mkdirSync(outDir, { recursive: true });

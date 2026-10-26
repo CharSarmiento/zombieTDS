@@ -22,6 +22,8 @@ export class Player extends Actor {
   armor = 0;
   maxArmor = PLAYER.maxArmor;
   alive = true;
+  /** permanent movement bonus from skills */
+  speedMultiplier = 1;
   /** seconds left on each power-up */
   readonly buffs: Record<BuffId, number> = { speed: 0, slow: 0, superpower: 0 };
   private invulnerableUntil = 0;
@@ -67,6 +69,13 @@ export class Player extends Actor {
     this.body.velocity.add(away.scale(hit.knockback * PLAYER.knockbackTaken));
     this.events.emit('hurt', hit);
     if (this.hp <= 0) this.die();
+  }
+
+  /** Applies skill-derived stats at the start of a run. */
+  applyStats(stats: { maxHp: number; startArmor: number; speedMultiplier: number }): void {
+    this.maxHp = this.hp = stats.maxHp;
+    this.armor = Math.min(this.maxArmor, stats.startArmor);
+    this.speedMultiplier = stats.speedMultiplier;
   }
 
   heal(amount: number): void {
@@ -153,7 +162,7 @@ export class Player extends Actor {
 
   private updateMovement(input: InputFrame, dt: number): void {
     const boost = this.buffs.speed > 0 ? BUFF_EFFECT.speedMultiplier : 1;
-    const speed = PLAYER.walkSpeed * (input.sprint ? PLAYER.sprintMultiplier : 1) * boost;
+    const speed = PLAYER.walkSpeed * this.speedMultiplier * (input.sprint ? PLAYER.sprintMultiplier : 1) * boost;
     const t = 1 - Math.exp(-PLAYER.acceleration * dt);
     const v = this.body.velocity;
     this.body.setVelocity(

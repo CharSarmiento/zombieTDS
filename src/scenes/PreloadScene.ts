@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { getManifest } from '../assets/manifest';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { animSettings, DERIVED_ANIMS } from '../data/anims';
-import { LEVELS, mapKey, PROPS_TILESET_KEY } from '../data/levels';
+import { LEVELS, mapKey, PROPS_TILESET_KEY, TEST_LEVELS } from '../data/levels';
 
 /** Loads every atlas listed in the manifest and registers all animations. */
 export class PreloadScene extends Phaser.Scene {
@@ -28,7 +28,8 @@ export class PreloadScene extends Phaser.Scene {
       spacing: ts.spacing,
     });
     this.load.json(PROPS_TILESET_KEY, 'tilesets/props.tsj');
-    for (const level of LEVELS) this.load.json(mapKey(level.map), `maps/${level.map}.json`);
+    const maps = new Set([...LEVELS, ...(import.meta.env.DEV ? TEST_LEVELS : [])].map((l) => l.map));
+    for (const map of maps) this.load.json(mapKey(map), `maps/${map}.json`);
     this.load.image('bg1', 'images/bg1.png');
     this.load.image('bg2', 'images/bg2.png');
   }
@@ -53,9 +54,8 @@ export class PreloadScene extends Phaser.Scene {
         repeat: d.repeat,
       });
     }
-    // The main menu arrives in M7; until then the game starts at character select.
     // Dev shortcut: ?scene=Game (or any scene key) jumps straight there.
     const jump = import.meta.env.DEV ? new URLSearchParams(location.search).get('scene') : null;
-    this.scene.start(jump && this.scene.get(jump) ? jump : 'CharacterSelect');
+    this.scene.start(jump && this.scene.get(jump) ? jump : 'MainMenu');
   }
 }

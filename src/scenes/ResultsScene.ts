@@ -87,6 +87,6 @@ export class ResultsScene extends Phaser.Scene {
 
   private toMenu(): void {
     this.scene.stop('Game');
-    this.scene.start('CharacterSelect');
+    this.scene.start('LevelMap');
   }
 }

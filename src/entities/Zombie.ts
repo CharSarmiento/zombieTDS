@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import type { Damageable, Hit } from '../combat/types';
-import { ENEMIES, ZOMBIE_ANIM_SPEED, type EnemyDef, type EnemyId } from '../data/enemies';
+import { drawShape, shapeHits } from '../combat/shapes';
+import { ENEMIES, ZOMBIE_ANIM_SPEED, type AttackDef, type EnemyDef, type EnemyId } from '../data/enemies';
 import type { Crowd } from '../systems/Crowd';
+import { pickWeighted } from '../systems/SpawnPicker';
 import type { FlowField } from '../systems/FlowField';
 import type { Fx } from '../systems/Fx';
 import { Actor, DEPTH } from './Actor';
@@ -20,6 +22,21 @@ export interface ZombieContext {
 
 type State = 'chase' | 'attack' | 'stagger' | 'dead';
 
+/** An attack in progress: where it was aimed, its timing and its ground marker. */
+interface ActiveAttack {
+  def: AttackDef;
+  ox: number;
+  oy: number;
+  angle: number;
+  start: number;
+  hitTime: number;
+  endTime: number;
+  landed?: boolean;
+  marker?: Phaser.GameObjects.Graphics;
+  lingerUntil?: number;
+  lingerTick?: number;
+}
+
 const TURN_SPEED = 7;
 const ACCEL = 6;
 const BURN_TINT = 0xff8840;
@@ -28,12 +45,21 @@ const CORPSE_MS = 9000;
 /** speed factor while off-screen */
 const CATCH_UP_MULTIPLIER = 2.2;
 
-/** Melee zombie: follows the flow field (or walks straight when it sees the player) and swipes. */
+/**
+ * Any melee enemy, from walkers to the final boss: follows the flow field (or walks straight
+ * when it sees the player) and uses the attacks listed in its data, with ground telegraphs,
+ * lunges and burning areas for the big ones.
+ */
 export class Zombie extends Actor implements Damageable {
   readonly def: EnemyDef;
   hp: number;
   state: State = 'chase';
-  private attackReadyAt = 0;
+  /** per-attack cooldowns (time when each becomes usable) */
+  private readyAt: number[];
+  private globalReadyAt = 0;
+  private attack?: ActiveAttack;
+  /** boss phase speed factor */
+  private rage = 1;
   private stateUntil = 0;
   private baseSpeed: number;
   /** preferred side (±1) to slide around blockers, so the horde spreads both ways */
@@ -54,13 +80,18 @@ export class Zombie extends Actor implements Damageable {
     super(scene, x, y, def.radius, undefined, DEPTH.actor);
     this.def = def;
     this.hp = def.hp;
+    this.readyAt = def.attacks.map(() => 0);
     // a little variety so the horde does not move in lockstep
     this.baseSpeed = def.speed * Phaser.Math.FloatBetween(0.9, 1.1);
     this.body.setMass(def.mass).setDamping(true).setDrag(0.01).setCollideWorldBounds(true);
     this.facing = Phaser.Math.Angle.Between(x, y, ctx.player.x, ctx.player.y);
-    this.sprite.play({ key: `${kind}/walk`, startFrame: Phaser.Math.Between(0, 8) }).setAlpha(0);
+    const walk = scene.anims.get(`${kind}/walk`);
+    this.sprite.play({ key: walk.key, startFrame: Phaser.Math.Between(0, walk.frames.length - 1) }).setAlpha(0);
     scene.tweens.add({ targets: this.sprite, alpha: 1, duration: 300 });
-    this.sprite.on(Phaser.Animations.Events.ANIMATION_COMPLETE, this.onAnimComplete, this);
+  }
+
+  get maxHp(): number {
+    return this.def.hp;
   }
 
   get alive(): boolean {
@@ -88,13 +119,12 @@ export class Zombie extends Actor implements Damageable {
         if (now >= this.stateUntil) this.state = 'chase';
         break;
       case 'attack':
-        this.brake(dt);
-        this.turnTowards(Phaser.Math.Angle.Between(this.x, this.y, p.x, p.y), dt * 0.6);
+        this.updateAttack(dt);
         break;
       case 'chase': {
-        const dist = Phaser.Math.Distance.Between(this.x, this.y, p.x, p.y);
-        if (p.alive && dist <= this.def.radius + p.radius + this.def.reach && now >= this.attackReadyAt) {
-          this.startAttack();
+        const a = p.alive && now >= this.globalReadyAt ? this.chooseAttack() : null;
+        if (a) {
+          this.startAttack(a);
           break;
         }
         this.chase(dt, p.alive ? null : 0);
@@ -136,7 +166,7 @@ export class Zombie extends Actor implements Damageable {
     // straight at the player when nothing is in between; else follow the field;
     // never stand still: without a field direction, keep pushing towards the player
     const dir = this.ctx.field.lineOfSight(this.x, this.y, p.x, p.y) ? direct : (this.ctx.field.direction(this.x, this.y) ?? direct);
-    const speed = speedOverride ?? this.baseSpeed * this.ctx.speedMultiplier() * this.catchUp();
+    const speed = speedOverride ?? this.baseSpeed * this.rage * this.ctx.speedMultiplier() * this.catchUp();
     const desired = new Phaser.Math.Vector2();
     if (dir && speed > 0) {
       // follow the path, but flow around neighbours instead of pushing into them
@@ -147,7 +177,7 @@ export class Zombie extends Actor implements Damageable {
     this.body.setVelocity(Phaser.Math.Linear(v.x, desired.x, t), Phaser.Math.Linear(v.y, desired.y, t));
     const moving = this.body.velocity.length();
     if (moving > 10) this.turnTowards(Math.atan2(this.body.velocity.y, this.body.velocity.x), dt);
-    this.sprite.anims.timeScale = Phaser.Math.Clamp(moving / ZOMBIE_ANIM_SPEED, 0.3, 1.8);
+    this.sprite.anims.timeScale = Phaser.Math.Clamp(moving / (this.def.animSpeed ?? ZOMBIE_ANIM_SPEED), 0.3, 1.8);
   }
 
   /**
@@ -162,31 +192,140 @@ export class Zombie extends Actor implements Damageable {
     return onScreen ? 1 : CATCH_UP_MULTIPLIER;
   }
 
-  private startAttack(): void {
-    this.state = 'attack';
-    this.attackReadyAt = this.scene.time.now + this.def.attackCooldown * 1000;
-    this.sprite.anims.timeScale = 1;
-    this.sprite.play(`${this.kind}/attack`);
-    const duration = this.sprite.anims.currentAnim!.duration;
-    this.scene.time.delayedCall(duration * this.def.attackHitAt, () => this.landHit());
+  /** Picks one of the attacks whose range covers the current gap and that is off cooldown. */
+  private chooseAttack(): AttackDef | null {
+    const p = this.ctx.player;
+    const gap = Phaser.Math.Distance.Between(this.x, this.y, p.x, p.y) - this.def.radius - p.radius;
+    const now = this.scene.time.now;
+    const options = this.def.attacks.filter(
+      (a, i) => now >= this.readyAt[i] && gap <= a.range && gap >= (a.minRange ?? -Infinity),
+    );
+    if (!options.length) return null;
+    return pickWeighted(options.map((a): [AttackDef, number] => [a, a.weight ?? 1]));
   }
 
-  private landHit(): void {
-    if (this.state !== 'attack') return;
+  private startAttack(a: AttackDef): void {
     const p = this.ctx.player;
-    const dist = Phaser.Math.Distance.Between(this.x, this.y, p.x, p.y);
-    const inFront = Math.abs(Phaser.Math.Angle.Wrap(Phaser.Math.Angle.Between(this.x, this.y, p.x, p.y) - this.facing)) < Math.PI / 2;
-    // a little extra reach so dodging needs real distance, not a pixel
-    if (dist <= this.def.radius + p.radius + this.def.reach * 1.35 && inFront) {
-      p.takeDamage({ amount: this.def.damage, source: 'melee', fromX: this.x, fromY: this.y, knockback: 180 });
+    const now = this.scene.time.now;
+    this.state = 'attack';
+    this.facing = Phaser.Math.Angle.Between(this.x, this.y, p.x, p.y);
+    this.sprite.play(`${this.kind}/${a.anim}`);
+    const animMs = this.sprite.anims.currentAnim!.duration;
+    const ms = a.duration ? a.duration * 1000 : animMs;
+    this.sprite.anims.timeScale = animMs / ms;
+    this.readyAt[this.def.attacks.indexOf(a)] = now + ms + a.cooldown * 1000;
+    // every attack waits a little before the next one, so attacks do not chain instantly
+    this.globalReadyAt = now + ms + 250;
+
+    const atk: ActiveAttack = { def: a, ox: this.x, oy: this.y, angle: this.facing, start: now, hitTime: now + ms * a.hitAt, endTime: now + ms };
+    if (a.telegraph) {
+      atk.marker = this.scene.add.graphics().setPosition(atk.ox, atk.oy).setRotation(atk.angle).setDepth(DEPTH.decal + 2);
+    }
+    this.attack = atk;
+  }
+
+  private updateAttack(dt: number): void {
+    const atk = this.attack!;
+    const a = atk.def;
+    const now = this.scene.time.now;
+    const p = this.ctx.player;
+
+    if (now < atk.hitTime) {
+      if (a.lunge && now > atk.start + 120) {
+        // dash along the locked direction after a short wind-up
+        this.body.setVelocity(Math.cos(atk.angle) * a.lunge, Math.sin(atk.angle) * a.lunge);
+      } else this.brake(dt);
+      if (!a.telegraph) this.turnTowards(Phaser.Math.Angle.Between(this.x, this.y, p.x, p.y), dt * 0.6);
+      if (atk.marker) {
+        const k = (now - atk.start) / (atk.hitTime - atk.start);
+        drawShape(atk.marker, a.shape, 0xff2a1a, 0.1 + 0.32 * k);
+      }
+    } else {
+      this.brake(dt);
+      if (!atk.landed) this.landHit(atk);
+    }
+    if (atk.lingerUntil && now < atk.lingerUntil) this.updateLinger(atk, now);
+    if (now >= atk.endTime) this.finishAttack();
+  }
+
+  private landHit(atk: ActiveAttack): void {
+    atk.landed = true;
+    const a = atk.def;
+    const p = this.ctx.player;
+    // telegraphed attacks hit where they were announced; plain swipes follow the attacker
+    const [ox, oy, ang] = a.telegraph ? [atk.ox, atk.oy, atk.angle] : [this.x, this.y, this.facing];
+    if (p.alive && shapeHits(a.shape, ox, oy, ang, p.x, p.y, p.radius)) {
+      p.takeDamage({ amount: a.damage, source: 'melee', fromX: this.x, fromY: this.y, knockback: a.knockback });
+    }
+    if (this.def.tier >= 3) this.ctx.fx.shake(this.def.tier >= 4 ? 0.006 : 0.003, 120);
+    if (a.linger) {
+      atk.lingerUntil = this.scene.time.now + a.linger.seconds * 1000;
+      atk.lingerTick = 0;
+      this.spawnFireZone(atk);
+    } else if (atk.marker) {
+      // flash, then fade out
+      drawShape(atk.marker, a.shape, 0xffffff, 0.45);
+      const m = atk.marker;
+      atk.marker = undefined;
+      this.scene.tweens.add({ targets: m, alpha: 0, duration: 160, onComplete: () => m.destroy() });
     }
   }
 
-  private onAnimComplete(anim: Phaser.Animations.Animation): void {
-    if (this.state === 'attack' && anim.key.endsWith('/attack')) {
+  /** Burning ground left by fire attacks: hurts the player every half second while standing in it. */
+  private updateLinger(atk: ActiveAttack, now: number): void {
+    const a = atk.def;
+    const p = this.ctx.player;
+    if (atk.marker) drawShape(atk.marker, a.shape, 0xff7a10, 0.2 + 0.08 * Math.sin(now / 90), false);
+    if (now < (atk.lingerTick ?? 0)) return;
+    atk.lingerTick = now + 500;
+    if (p.alive && shapeHits(a.shape, atk.ox, atk.oy, atk.angle, p.x, p.y, p.radius)) {
+      p.takeDamage({ amount: a.linger!.dps * 0.5, source: 'fire', fromX: atk.ox, fromY: atk.oy, knockback: 0 });
+    }
+  }
+
+  private spawnFireZone(atk: ActiveAttack): void {
+    const s = atk.def.shape;
+    if (s.type !== 'line') return;
+    const flames: Phaser.GameObjects.Sprite[] = [];
+    for (let d = 40; d < s.length; d += 110) {
+      const x = atk.ox + Math.cos(atk.angle) * d + Phaser.Math.Between(-20, 20);
+      const y = atk.oy + Math.sin(atk.angle) * d + Phaser.Math.Between(-20, 20);
+      flames.push(
+        this.scene.add
+          .sprite(x, y, 'fx')
+          .play({ key: 'fx/flame', startFrame: Phaser.Math.Between(0, 5) })
+          .setRotation(Math.random() * Math.PI * 2)
+          .setScale(1.1)
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setDepth(DEPTH.decal + 3),
+      );
+    }
+    const marker = atk.marker;
+    this.scene.time.delayedCall(atk.def.linger!.seconds * 1000, () => {
+      this.scene.tweens.add({
+        targets: [...flames, ...(marker ? [marker] : [])],
+        alpha: 0,
+        duration: 400,
+        onComplete: () => [...flames, marker].forEach((o) => o?.destroy()),
+      });
+    });
+  }
+
+  private finishAttack(): void {
+    const atk = this.attack;
+    // a lingering fire zone outlives the attack: it cleans itself up
+    if (atk?.marker && !atk.lingerUntil) atk.marker.destroy();
+    this.attack = undefined;
+    if (this.state === 'attack') {
       this.state = 'chase';
+      this.sprite.anims.timeScale = 1;
       this.sprite.play(`${this.kind}/walk`);
     }
+  }
+
+  /** Phase change of a boss: faster from now on. */
+  enrage(multiplier: number): void {
+    this.rage = multiplier;
   }
 
   private brake(dt: number): void {
@@ -215,12 +354,19 @@ export class Zombie extends Actor implements Damageable {
     if (this.scene.time.now < this.flashUntil) this.sprite.setTintFill(0xffffff);
     else if (this.burnLeft > 0 && this.alive) this.sprite.setTint(BURN_TINT);
     else if (this.alive && this.ctx.speedMultiplier() < 1) this.sprite.setTint(SLOW_TINT);
+    else if (this.alive && this.rage > 1) this.sprite.setTint(0xffa0a0);
     else this.sprite.clearTint();
   }
 
   private die(): void {
+    if (this.attack && !this.attack.lingerUntil) this.attack.marker?.destroy();
+    this.attack = undefined;
     this.state = 'dead';
     this.burnLeft = 0;
+    if (this.def.tier >= 4) {
+      this.ctx.fx.shake(0.02, 600);
+      for (let i = 0; i < 6; i++) this.ctx.fx.bloodSplat(this.x + Phaser.Math.Between(-80, 80), this.y + Phaser.Math.Between(-80, 80), 2.2);
+    }
     this.body.setVelocity(0, 0);
     this.body.enable = false;
     this.sprite.anims.timeScale = 1;

@@ -47,7 +47,10 @@ export class LevelHud {
     if (status.progress !== null) {
       const x = (GAME_WIDTH - BAR_W) / 2, y = 108;
       g.fillStyle(0x000000, 0.6).fillRect(x - 3, y - 3, BAR_W + 6, 14);
-      g.fillStyle(0xc8e04a, 1).fillRect(x, y, BAR_W * Phaser.Math.Clamp(status.progress, 0, 1), 8);
+      // boss health gets a thicker bar
+      const h = status.color ? 16 : 8;
+      if (status.color) g.fillStyle(0x000000, 0.6).fillRect(x - 3, y - 3, BAR_W + 6, h + 6);
+      g.fillStyle(status.color ?? 0xc8e04a, 1).fillRect(x, y, BAR_W * Phaser.Math.Clamp(status.progress, 0, 1), h);
     }
     this.money.setText(`$${money}`);
     this.updateBuffs();

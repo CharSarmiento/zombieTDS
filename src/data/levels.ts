@@ -18,7 +18,20 @@ export interface Trickle {
 export type LevelStep =
   | { type: 'waves'; waves: Wave[]; /** seconds of calm between waves */ breakTime: number }
   | { type: 'survive'; seconds: number; trickle: Trickle }
-  | { type: 'reach'; /** marker rectangle name in the map */ marker: 'exit'; trickle?: Trickle };
+  | { type: 'reach'; /** marker rectangle name in the map */ marker: 'exit'; trickle?: Trickle }
+  | BossStep;
+
+/**
+ * Boss fight: the boss never comes alone. It arrives with an escort, common enemies keep
+ * trickling in, and each phase (crossed hp fraction) summons reinforcements and speeds it up.
+ */
+export interface BossStep {
+  type: 'boss';
+  boss: EnemyId;
+  escort: Partial<Record<EnemyId, number>>;
+  trickle: Trickle;
+  phases: { at: number; summon: Partial<Record<EnemyId, number>>; enrage: number }[];
+}
 
 export interface LevelDef {
   id: string;
@@ -53,5 +66,45 @@ export const LEVELS: LevelDef[] = [
   },
 ];
 
-export const mapKey = (map: string) => `map:${map}`;
+/**
+ * Dev-only test levels (not in the campaign map): `?scene=Game&level=test_boss1`.
+ * The campaign levels of M9 reuse these fights.
+ */
+export const TEST_LEVELS: LevelDef[] = [
+  {
+    id: 'test_elites', name: 'Prueba: élites', map: 'arena', reward: 0,
+    steps: [{ type: 'waves', breakTime: 4, waves: [{ spawn: { bighands: 2, bighead: 2, zombie1: 8, cop: 4 }, maxAlive: 12, interval: 0.8 }] }],
+  },
+  {
+    id: 'test_boss1', name: 'Prueba: El Cosido', map: 'arena', reward: 0,
+    steps: [{
+      type: 'boss', boss: 'boss1', escort: { zombie1: 4, zombie3: 4 },
+      trickle: { weights: { ...WALKERS, cop: 1 }, maxAlive: 8, interval: 2.5 },
+      phases: [{ at: 0.5, summon: { army: 3, cop: 4 }, enrage: 1.2 }],
+    }],
+  },
+  {
+    id: 'test_boss2', name: 'Prueba: La Tenaza', map: 'arena', reward: 0,
+    steps: [{
+      type: 'boss', boss: 'boss2', escort: { cop: 4, army: 2 },
+      trickle: { weights: { ...WALKERS, cop: 2, army: 1 }, maxAlive: 9, interval: 2.2 },
+      phases: [{ at: 0.6, summon: { bighands: 1, cop: 4 }, enrage: 1.15 }, { at: 0.3, summon: { bighead: 1, army: 3 }, enrage: 1.3 }],
+    }],
+  },
+  {
+    id: 'test_megaboss', name: 'Prueba: La Abominación', map: 'arena', reward: 0,
+    steps: [{
+      type: 'boss', boss: 'megaboss', escort: { bighands: 1, army: 3, cop: 3 },
+      trickle: { weights: { ...WALKERS, cop: 2, army: 2 }, maxAlive: 12, interval: 1.8 },
+      phases: [
+        { at: 0.66, summon: { bighead: 2, cop: 4 }, enrage: 1.15 },
+        { at: 0.33, summon: { bighands: 2, army: 4 }, enrage: 1.3 },
+      ],
+    }],
+  },
+];
+
+export const findLevel = (id?: string): LevelDef => [...LEVELS, ...TEST_LEVELS].find((l) => l.id === id) ?? LEVELS[0];
+
+export const mapKey =(map: string) => `map:${map}`;
 export const PROPS_TILESET_KEY = 'props-tileset';

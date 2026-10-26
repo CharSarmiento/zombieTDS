@@ -26,7 +26,8 @@ const NEIGHBOUR_RANGE = 1.6;
 export class Crowd<T extends CrowdMember> {
   private cells = new Map<number, T[]>();
 
-  constructor(private cellSize = 90) {}
+  /** cells must exceed the largest pair of radii (megaboss + walker) for 3×3 neighbour queries */
+  constructor(private cellSize = 150) {}
 
   rebuild(members: readonly T[]): void {
     this.cells.clear();

@@ -33,7 +33,7 @@ Maps are regular Tiled JSON files: open `public/maps/level01.json` in [Tiled](ht
 
 Once a map has been edited by hand, `npm run maps` leaves it alone (unless `--force`).
 
-Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; `&demo=rifle` (any weapon id) makes the player invulnerable and auto-fires at the nearest zombie; `&horde=60` spawns that many zombies at once; `&god=1` makes the player invulnerable; `&zoom=0.4` zooms out; `&at=1000,700` places the player; in game F1 shows hitboxes, F2 refills ammo, F3 spawns 10 zombies, F4 kills every zombie and F5 skips the current objective; F9 on character select opens the animation preview.
+Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; `&level=test_boss1` (also `test_boss2`, `test_megaboss`, `test_elites`) loads a test fight; `&demo=rifle` (any weapon id) makes the player invulnerable and auto-fires at the nearest zombie; `&horde=60` spawns that many zombies at once; `&god=1` makes the player invulnerable; `&zoom=0.4` zooms out; `&at=1000,700` places the player; in game F1 shows hitboxes, F2 refills ammo, F3 spawns 10 zombies, F4 kills every zombie and F5 skips the current objective; on the main menu F6 gives $1000 and unlocks everything, F7 wipes the save and F9 opens the animation preview.
 
 ## Controls
 
@@ -56,8 +56,8 @@ Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; `&demo=rifle`
 - [x] M4 · Zombies (tiers 1–2), flow-field AI
 - [x] M5 · Levels (Tiled maps, walls, cover, explosive barrels)
 - [x] M6 · Level loop: waves, objectives, pickups, HUD
-- [ ] M7 · Meta: menus, character select, level map, shop, skills, save
-- [ ] M8 · Elites and bosses
+- [x] M7 · Meta: menus, character select, level map, shop, skills, save
+- [x] M8 · Elites and bosses (bosses always fight alongside escorts and reinforcements)
 - [ ] M9 · 10-level campaign and balance
 - [ ] M10 · Audio, options, polish, desktop build
 

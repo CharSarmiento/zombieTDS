@@ -71,6 +71,7 @@ export class Level {
   readonly solids: Solid[] = [];
   readonly explosives: ExplosivePlacement[] = [];
   playerStart = new Phaser.Math.Vector2();
+  bossPoint: Phaser.Math.Vector2 | null = null;
   readonly spawnPoints: Phaser.Math.Vector2[] = [];
   readonly exits: Phaser.Geom.Rectangle[] = [];
   private buckets = new Map<number, Solid[]>();
@@ -230,6 +231,7 @@ export class Level {
 
   private placeMarker(obj: TiledObject): void {
     if (obj.name === 'player') this.playerStart.set(obj.x, obj.y);
+    else if (obj.name === 'boss') this.bossPoint = new Phaser.Math.Vector2(obj.x, obj.y);
     else if (obj.name === 'spawn') this.spawnPoints.push(new Phaser.Math.Vector2(obj.x, obj.y));
     else if (obj.name === 'exit') this.exits.push(new Phaser.Geom.Rectangle(obj.x, obj.y, obj.width, obj.height));
   }

@@ -70,6 +70,6 @@ export class PauseScene extends Phaser.Scene {
 
   private quit(): void {
     this.scene.stop('Game');
-    this.scene.start('CharacterSelect');
+    this.scene.start('LevelMap');
   }
 }

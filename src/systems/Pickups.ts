@@ -37,7 +37,13 @@ export class Pickups {
 
   /** Rolls the drop table for a killed enemy. */
   rollDrop(x: number, y: number, def: EnemyDef): void {
-    if (Math.random() < DROPS.moneyChance + DROPS.tierBonus(def)) this.spawn('money', x - 14, y, def.reward);
+    if (def.coins) {
+      // elites and bosses burst into a pile of coins
+      for (let i = 0; i < def.coins; i++) {
+        const a = Math.random() * Math.PI * 2, r = 20 + Math.random() * (30 + def.coins * 6);
+        this.spawn('money', x + Math.cos(a) * r, y + Math.sin(a) * r, def.reward);
+      }
+    } else if (Math.random() < DROPS.moneyChance + DROPS.tierBonus(def)) this.spawn('money', x - 14, y, def.reward);
     const bonus = 1 + DROPS.tierBonus(def) * 4;
     const table = DROPS.items.map(([k, w]): [PickupKind | 'none', number] => [k, k === 'none' ? w : w * bonus]);
     const kind = pickWeighted(table);

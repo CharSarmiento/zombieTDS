@@ -48,10 +48,6 @@ export class CharacterSelectScene extends Phaser.Scene {
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 70, '', { fontFamily: FONT, fontSize: '32px', color: '#d8d8d8' })
       .setOrigin(0.5);
 
-    if (import.meta.env.DEV) {
-      this.add.text(20, GAME_HEIGHT - 40, 'F9: vista de animaciones', { fontSize: '18px', color: '#888' });
-      this.input.keyboard!.on('keydown-F9', () => this.scene.start('AnimPreview'));
-    }
     this.select(this.index);
   }
 
@@ -59,10 +55,11 @@ export class CharacterSelectScene extends Phaser.Scene {
     const input = this.controls.update();
     if (input.navX) this.select(Phaser.Math.Wrap(this.index + input.navX, 0, ORDER.length));
     if (input.confirmPressed) this.confirm();
+    if (input.pausePressed || input.backPressed) this.scene.start('MainMenu');
     this.hint.setText(
       input.device === 'pad'
-        ? '◄ ►  elegir      A  confirmar'
-        : 'A / D  o  ← →  elegir      ENTER o clic  confirmar',
+        ? '◄ ►  elegir      A  confirmar      B  volver'
+        : 'A / D  o  ← →  elegir      ENTER o clic  confirmar      ESC  volver',
     );
   }
 
@@ -79,6 +76,6 @@ export class CharacterSelectScene extends Phaser.Scene {
 
   private confirm(): void {
     updateSave({ character: ORDER[this.index] });
-    this.scene.start('Game');
+    this.scene.start('MainMenu');
   }
 }
