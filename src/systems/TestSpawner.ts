@@ -20,6 +20,8 @@ export class TestSpawner {
     private isFree: (x: number, y: number) => boolean,
     private spawn: (kind: EnemyId, x: number, y: number) => void,
     private aliveCount: () => number,
+    /** map spawn markers; when some are off-screen they are preferred over random spots */
+    private points: Phaser.Math.Vector2[] = [],
   ) {}
 
   /** Target population: 6 at start, +1 every 8 s, capped at 45. */
@@ -43,6 +45,17 @@ export class TestSpawner {
   private spawnOne(): void {
     const view = this.scene.cameras.main.worldView;
     const margin = 140;
+    const hidden = this.points.filter((p) => !Phaser.Geom.Rectangle.Contains(Phaser.Geom.Rectangle.Inflate(Phaser.Geom.Rectangle.Clone(view), margin, margin), p.x, p.y));
+    if (hidden.length) {
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const p = Phaser.Utils.Array.GetRandom(hidden);
+        const x = p.x + Phaser.Math.Between(-60, 60), y = p.y + Phaser.Math.Between(-60, 60);
+        if (this.bounds.contains(x, y) && this.isFree(x, y)) {
+          this.spawn(pickWeighted(MIX), x, y);
+          return;
+        }
+      }
+    }
     for (let attempt = 0; attempt < 20; attempt++) {
       // a random point on a ring just outside the visible area
       const side = Phaser.Math.Between(0, 3);

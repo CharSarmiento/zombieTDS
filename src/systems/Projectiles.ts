@@ -24,6 +24,8 @@ export class Projectiles {
     private scene: Phaser.Scene,
     private fx: Fx,
     private targets: () => readonly Damageable[],
+    /** walls and other bullet-blocking geometry: first hit t in [0,1] along the segment, or null */
+    private blocker: (x0: number, y0: number, dx: number, dy: number) => number | null = () => null,
   ) {}
 
   fire(x: number, y: number, angle: number, speed: number, range: number, damage: number, knockback: number): void {
@@ -51,6 +53,12 @@ export class Projectiles {
       const dx = (b.vx / len) * step, dy = (b.vy / len) * step;
 
       const hit = this.firstHit(x0, y0, dx, dy);
+      const wall = this.blocker(x0, y0, dx, dy);
+      if (wall !== null && (!hit || wall < hit.t)) {
+        this.fx.impact(x0 + dx * wall, y0 + dy * wall, Math.atan2(dy, dx));
+        this.release(b);
+        continue;
+      }
       if (hit) {
         const hx = x0 + dx * hit.t, hy = y0 + dy * hit.t;
         hit.target.takeDamage({ amount: b.damage, source: 'bullet', fromX: x0, fromY: y0, knockback: b.knockback });

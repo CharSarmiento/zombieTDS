@@ -8,6 +8,8 @@ export interface CrowdMember {
   readonly alive: boolean;
   readonly root: Phaser.GameObjects.Zone;
   readonly mass: number;
+  /** current speed, px/s */
+  readonly speed: number;
 }
 
 /** Only part of the overlap is corrected each frame, so pushing looks soft instead of jittery. */
@@ -69,6 +71,8 @@ export class Crowd<T extends CrowdMember> {
   avoidance(m: T, dir: Phaser.Math.Vector2, side: number): Phaser.Math.Vector2 {
     const out = new Phaser.Math.Vector2();
     let blocked = 0;
+    /** blocked by someone slow or standing (attacking): only then ease off */
+    let jammed = 0;
     this.forNeighbours(m, (o) => {
       if (o === m) return;
       const dx = o.x - m.x, dy = o.y - m.y;
@@ -81,13 +85,21 @@ export class Crowd<T extends CrowdMember> {
       out.y -= (dy / d) * strength * 0.6;
       // neighbour ahead, inside the walking corridor?
       const ahead = (dx * dir.x + dy * dir.y) / d;
-      if (ahead > 0.55) blocked = Math.max(blocked, strength * ahead);
+      if (ahead > 0.55) {
+        blocked = Math.max(blocked, strength * ahead);
+        if (o.speed < 30) jammed = Math.max(jammed, strength * ahead);
+      }
     });
     if (blocked > 0) {
-      // slide perpendicular to the walking direction, on this member's preferred side,
-      // and ease off forward so the back rows queue softly instead of crushing the front
-      out.x += (-dir.y * side * 1.2 - dir.x * 0.7) * blocked;
-      out.y += (dir.x * side * 1.2 - dir.y * 0.7) * blocked;
+      // slide perpendicular to the walking direction, on this member's preferred side
+      out.x += -dir.y * side * 1.2 * blocked;
+      out.y += dir.x * side * 1.2 * blocked;
+    }
+    if (jammed > 0) {
+      // the one ahead is not moving (attacking the target): ease off instead of crushing it.
+      // A walking neighbour is simply followed, so queues through doors keep flowing.
+      out.x -= dir.x * 0.7 * jammed;
+      out.y -= dir.y * 0.7 * jammed;
     }
     return out;
   }

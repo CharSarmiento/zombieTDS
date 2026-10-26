@@ -411,8 +411,12 @@ function bottomPoint(img) {
   return { x: w / 2, y: h };
 }
 
-/** Crops to content and scales. Returns a packable frame (pivot given in source px, optional). */
-async function makeFrame(name, img, scale, pivot) {
+/**
+ * Crops to content and scales. Returns a packable frame (pivot given in source px, optional).
+ * `tight` frames drop the transparent margins from their source size, so their centre is the
+ * centre of the visible content (static props: matches the PNGs exported for Tiled).
+ */
+async function makeFrame(name, img, scale, pivot, tight = false) {
   const b = bbox(img);
   const tw = Math.max(1, Math.round(b.w * scale));
   const th = Math.max(1, Math.round(b.h * scale));
@@ -421,9 +425,9 @@ async function makeFrame(name, img, scale, pivot) {
     .resize(tw, th, { kernel: 'lanczos3', fit: 'fill' })
     .raw()
     .toBuffer();
-  const ox = Math.round(b.x * scale), oy = Math.round(b.y * scale);
-  const sw = Math.max(Math.round(img.w * scale), ox + tw);
-  const sh = Math.max(Math.round(img.h * scale), oy + th);
+  const ox = tight ? 0 : Math.round(b.x * scale), oy = tight ? 0 : Math.round(b.y * scale);
+  const sw = tight ? tw : Math.max(Math.round(img.w * scale), ox + tw);
+  const sh = tight ? th : Math.max(Math.round(img.h * scale), oy + th);
   const f = { name, buf, w: tw, h: th, ox, oy, sw, sh };
   if (pivot) f.pivot = { x: (pivot.x * scale) / sw, y: (pivot.y * scale) / sh };
   return f;
@@ -527,7 +531,7 @@ async function buildStatics(def, manifest) {
   const frames = await pool(files, async (file) => {
     const img = await loadRaw(file);
     const base = path.basename(file, '.png');
-    return makeFrame(`${def.prefix}/${def.name(base)}`, img, def.scale);
+    return makeFrame(`${def.prefix}/${def.name(base)}`, img, def.scale, undefined, true);
   });
   (manifest.statics[def.prefix] ??= { atlas: def.group, frames: [] }).frames.push(...frames.map((f) => f.name));
   return frames;
@@ -576,6 +580,39 @@ async function writeAtlas(group, frames) {
   }
   await fs.writeFile(path.join(ATLAS_DIR, `${group}.json`), JSON.stringify({ textures, meta: { app: 'tools/build-assets.mjs' } }));
   console.log(`  -> ${group}: ${frames.length} frames on ${textures.length} page(s) [${textures.map((t) => `${t.size.w}x${t.size.h}`).join(', ')}]`);
+}
+
+/**
+ * Exports every environment static as its own PNG plus a Tiled image-collection tileset
+ * (public/tilesets/props.tsj), so maps can be edited visually in Tiled. Tile ids come from
+ * tools/props-ids.json (versioned) and never change once assigned, so maps stay valid.
+ */
+async function buildPropsTileset(frames) {
+  const idsPath = path.join(ROOT, 'tools', 'props-ids.json');
+  const ids = fss.existsSync(idsPath) ? JSON.parse(await fs.readFile(idsPath, 'utf8')) : {};
+  let next = Math.max(-1, ...Object.values(ids)) + 1;
+  const outDir = path.join(PUBLIC, 'tilesets', 'props');
+  const tiles = [];
+  let maxW = 1, maxH = 1;
+  for (const f of [...frames].sort((a, b) => a.name.localeCompare(b.name))) {
+    if (!(f.name in ids)) ids[f.name] = next++;
+    const file = path.join(outDir, `${f.name}.png`);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await sharp(f.buf, { raw: { width: f.w, height: f.h, channels: 4 } }).png({ compressionLevel: 9 }).toFile(file);
+    tiles.push({ id: ids[f.name], image: `props/${f.name}.png`, imagewidth: f.w, imageheight: f.h });
+    maxW = Math.max(maxW, f.w);
+    maxH = Math.max(maxH, f.h);
+  }
+  tiles.sort((a, b) => a.id - b.id);
+  const tsj = {
+    type: 'tileset', version: '1.10', tiledversion: '1.11.0', name: 'props',
+    tilewidth: maxW, tileheight: maxH, tilecount: tiles.length, columns: 0, margin: 0, spacing: 0,
+    grid: { orientation: 'orthogonal', width: 1, height: 1 },
+    tiles,
+  };
+  await fs.writeFile(path.join(PUBLIC, 'tilesets', 'props.tsj'), JSON.stringify(tsj, null, 1));
+  await fs.writeFile(idsPath, JSON.stringify(ids, null, 1));
+  console.log(`  -> props tileset: ${tiles.length} images`);
 }
 
 async function buildTileset(manifest) {
@@ -676,6 +713,7 @@ async function main() {
     for (const def of STATICS) if (def.group === group) frames.push(...(await buildStatics(def, manifest)));
     await writeAtlas(group, frames);
     manifest.atlases[group] = `atlases/${group}.json`;
+    if (group === 'env') await buildPropsTileset(frames);
   }
 
   if (!only.length || only.includes('tileset')) await buildTileset(manifest);

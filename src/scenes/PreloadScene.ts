@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getManifest } from '../assets/manifest';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { animSettings, DERIVED_ANIMS } from '../data/anims';
+import { LEVELS, mapKey, PROPS_TILESET_KEY } from '../data/levels';
 
 /** Loads every atlas listed in the manifest and registers all animations. */
 export class PreloadScene extends Phaser.Scene {
@@ -26,6 +27,8 @@ export class PreloadScene extends Phaser.Scene {
       margin: ts.margin,
       spacing: ts.spacing,
     });
+    this.load.json(PROPS_TILESET_KEY, 'tilesets/props.tsj');
+    for (const level of LEVELS) this.load.json(mapKey(level.map), `maps/${level.map}.json`);
     this.load.image('bg1', 'images/bg1.png');
     this.load.image('bg2', 'images/bg2.png');
   }

@@ -1,14 +1,16 @@
 import Phaser from 'phaser';
-import { getManifest } from '../assets/manifest';
-import { GAME_HEIGHT, GAME_WIDTH, TILE_SIZE } from '../config';
+import { GAME_HEIGHT, GAME_WIDTH } from '../config';
+import type { Damageable } from '../combat/types';
 import type { EnemyId } from '../data/enemies';
+import { LEVELS } from '../data/levels';
 import { CAMERA } from '../data/player';
 import { WEAPON_ORDER, WEAPONS, type WeaponId } from '../data/weapons';
 import { DEPTH } from '../entities/Actor';
+import { Barrel, EXPLOSION } from '../entities/Barrel';
 import { Player } from '../entities/Player';
 import { Zombie, type ZombieContext } from '../entities/Zombie';
+import { Level } from '../level/Level';
 import { Crowd } from '../systems/Crowd';
-import { FlowField } from '../systems/FlowField';
 import { Fx } from '../systems/Fx';
 import { InputManager, type InputFrame } from '../systems/InputManager';
 import { Projectiles } from '../systems/Projectiles';
@@ -19,25 +21,23 @@ import { FONT } from '../ui/fonts';
 import { PlayerHud } from '../ui/PlayerHud';
 import { WeaponHud } from '../ui/WeaponHud';
 
-const MAP_W = 40;
-const MAP_H = 28;
-/** flow field resolution, px */
-const FIELD_CELL = 50;
-
 /**
- * Gameplay scene. Until M5 it is a test arena (ground, scenery without collision) with an
- * endless zombie spawner. Levels from Tiled and the wave director replace it later.
+ * Gameplay scene: loads a Tiled level and runs combat on it. Until M6 the zombies come from an
+ * endless test spawner; the wave director and objectives replace it.
  */
 export class GameScene extends Phaser.Scene {
   private controls!: InputManager;
+  private level!: Level;
   private player!: Player;
   private fx!: Fx;
   private projectiles!: Projectiles;
   private weapons!: WeaponSystem;
-  private field!: FlowField;
   private crowd!: Crowd<Zombie>;
   private spawner!: TestSpawner;
   private zombies: Zombie[] = [];
+  private barrels: Barrel[] = [];
+  /** zombies + barrels, rebuilt each frame for weapons and bullets */
+  private targets: Damageable[] = [];
   private zombieGroup!: Phaser.GameObjects.Group;
   private zombieCtx!: ZombieContext;
   private kills = 0;
@@ -52,32 +52,37 @@ export class GameScene extends Phaser.Scene {
     super('Game');
   }
 
-  create(): void {
+  create(data: { level?: string } = {}): void {
     this.zombies = [];
+    this.barrels = [];
+    this.targets = [];
     this.kills = 0;
     this.deathOverlay = undefined;
     this.controls = new InputManager(this);
-    const worldW = MAP_W * TILE_SIZE;
-    const worldH = MAP_H * TILE_SIZE;
-    this.buildArena();
-    this.physics.world.setBounds(0, 0, worldW, worldH);
 
-    this.player = new Player(this, worldW / 2, worldH / 2, loadSave().character);
+    const def = LEVELS.find((l) => l.id === data.level) ?? LEVELS[0];
+    this.level = new Level(this, def.map);
+    const { width, height } = this.level;
+    this.physics.world.setBounds(0, 0, width, height);
+
+    this.player = new Player(this, this.level.playerStart.x, this.level.playerStart.y, loadSave().character);
     this.player.body.setMass(1.5);
+    this.physics.add.collider(this.player.root, this.level.statics);
 
     this.fx = new Fx(this);
-    const targets = () => this.zombies;
-    this.projectiles = new Projectiles(this, this.fx, targets);
+    const targets = () => this.targets;
+    this.projectiles = new Projectiles(this, this.fx, targets, (x0, y0, dx, dy) => this.level.raycast(x0, y0, dx, dy));
     this.weapons = new WeaponSystem(this, this.player, this.projectiles, this.fx, targets);
+    this.barrels = this.level.explosives.map((p) => new Barrel(this, this.level, p, (b) => this.explode(b.x, b.y)));
 
-    this.field = new FlowField(worldW, worldH, FIELD_CELL);
     this.zombieGroup = this.add.group();
-    // zombies only collide rigidly with the player; among themselves the Crowd keeps them apart softly
+    // zombies only collide rigidly with the player and the level; among themselves the Crowd keeps them apart softly
     this.physics.add.collider(this.player.root, this.zombieGroup);
+    this.physics.add.collider(this.zombieGroup, this.level.statics);
     this.crowd = new Crowd<Zombie>();
     this.zombieCtx = {
       player: this.player,
-      field: this.field,
+      field: this.level.field,
       crowd: this.crowd,
       fx: this.fx,
       speedMultiplier: () => 1,
@@ -85,10 +90,11 @@ export class GameScene extends Phaser.Scene {
     };
     this.spawner = new TestSpawner(
       this,
-      new Phaser.Geom.Rectangle(60, 60, worldW - 120, worldH - 120),
-      (x, y) => !this.field.isBlockedAt(x, y),
+      new Phaser.Geom.Rectangle(60, 60, width - 120, height - 120),
+      (x, y) => !this.level.field.isBlockedAt(x, y),
       (kind, x, y) => this.spawnZombie(kind, x, y),
       () => this.zombies.filter((z) => z.alive).length,
+      this.level.spawnPoints,
     );
 
     this.player.events.on('hurt', () => {
@@ -98,7 +104,7 @@ export class GameScene extends Phaser.Scene {
     this.player.events.on('died', () => this.time.delayedCall(1600, () => this.showDeath()));
 
     const cam = this.cameras.main;
-    cam.setBounds(0, 0, worldW, worldH);
+    cam.setBounds(0, 0, width, height);
     cam.startFollow(this.player.root, true, CAMERA.lerp, CAMERA.lerp);
 
     this.crosshair = this.add.image(0, 0, 'ui', 'el/0005').setScale(0.32).setScrollFactor(0).setDepth(DEPTH.ui).setAlpha(0.9);
@@ -117,9 +123,17 @@ export class GameScene extends Phaser.Scene {
     kb.on('keydown-F1', () => this.toggleDebug());
     kb.on('keydown-F2', () => this.weapons.refillAll());
     kb.on('keydown-F3', () => this.spawner.burst(10));
-    // dev: ?horde=N spawns N zombies at once (performance checks)
-    const horde = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get('horde')) : 0;
-    if (horde > 0) this.time.delayedCall(500, () => this.spawner.burst(horde));
+    if (import.meta.env.DEV) {
+      const params = new URLSearchParams(location.search);
+      // ?horde=N spawns N zombies at once (performance checks); ?zoom=0.4 zooms out to review maps
+      const horde = Number(params.get('horde'));
+      if (horde > 0) this.time.delayedCall(500, () => this.spawner.burst(horde));
+      const zoom = Number(params.get('zoom'));
+      if (zoom > 0) cam.setZoom(zoom);
+      // ?at=x,y places the player (pathing checks)
+      const at = params.get('at')?.split(',').map(Number);
+      if (at?.length === 2) this.player.body.reset(at[0], at[1]);
+    }
   }
 
   update(_time: number, deltaMs: number): void {
@@ -136,17 +150,19 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.targets = [...this.zombies, ...this.barrels];
     this.player.update(input, dt);
     if (this.player.alive) {
       this.weapons.update(input, dt);
       this.spawner.update(dt);
     }
     this.projectiles.update(dt);
-    this.field.update(this.player.x, this.player.y);
+    this.level.field.update(this.player.x, this.player.y);
     this.crowd.rebuild(this.zombies);
     this.crowd.resolve();
     for (const z of this.zombies) z.update(dt);
     if (this.zombies.some((z) => z.destroyed)) this.zombies = this.zombies.filter((z) => !z.destroyed);
+    if (this.barrels.some((b) => !b.alive)) this.barrels = this.barrels.filter((b) => b.alive);
 
     this.updateCamera(input, dt);
     this.updateCrosshair(input);
@@ -157,6 +173,26 @@ export class GameScene extends Phaser.Scene {
     const z = new Zombie(this, x, y, kind, this.zombieCtx);
     this.zombies.push(z);
     this.zombieGroup.add(z.root);
+  }
+
+  /** Area damage with linear falloff; hits zombies, other barrels and (less) the player. */
+  private explode(x: number, y: number): void {
+    const R = EXPLOSION.radius;
+    const falloff = (d: number) => 1 - 0.75 * Math.min(1, d / R);
+    for (const t of [...this.zombies, ...this.barrels]) {
+      if (!t.alive) continue;
+      const d = Phaser.Math.Distance.Between(x, y, t.x, t.y) - t.radius;
+      if (d > R) continue;
+      t.takeDamage({ amount: EXPLOSION.damage * falloff(Math.max(0, d)), source: 'explosion', fromX: x, fromY: y, knockback: EXPLOSION.knockback });
+    }
+    const dp = Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) - this.player.radius;
+    if (dp <= R) {
+      this.player.takeDamage({
+        amount: EXPLOSION.damage * EXPLOSION.playerFactor * falloff(Math.max(0, dp)),
+        source: 'explosion', fromX: x, fromY: y, knockback: EXPLOSION.knockback,
+      });
+    }
+    this.fx.shake(0.02, 320);
   }
 
   private showDeath(): void {
@@ -236,37 +272,5 @@ export class GameScene extends Phaser.Scene {
     if (!world.debugGraphic) world.createDebugGraphic();
     world.drawDebug = !world.drawDebug;
     world.debugGraphic.clear().setDepth(DEPTH.ui);
-  }
-
-  /** Grass field crossed by a road, with decals and some props for a sense of motion. */
-  private buildArena(): void {
-    const manifest = getManifest(this);
-    const tileIndex = (name: string) => manifest.tileset.names.indexOf(name);
-    const ts = manifest.tileset;
-    const map = this.make.tilemap({ tileWidth: TILE_SIZE, tileHeight: TILE_SIZE, width: MAP_W, height: MAP_H });
-    const tileset = map.addTilesetImage('ground', 'ground', ts.tileSize, ts.tileSize, ts.margin, ts.spacing)!;
-    const layer = map.createBlankLayer('ground', tileset)!.setDepth(DEPTH.ground);
-    layer.fill(tileIndex('grass/00'));
-    layer.fill(tileIndex('asphalt/12'), 0, 12, MAP_W, 3);
-    layer.fill(tileIndex('asphalt/12'), 24, 0, 3, MAP_H);
-
-    const rnd = new Phaser.Math.RandomDataGenerator(['arena']);
-    const decals = [...manifest.statics.leaf.frames, ...manifest.statics.crack_ground.frames.slice(0, 12)];
-    for (let i = 0; i < 140; i++) {
-      this.add
-        .image(rnd.between(0, MAP_W * TILE_SIZE), rnd.between(0, MAP_H * TILE_SIZE), 'env', rnd.pick(decals))
-        .setRotation(rnd.rotation())
-        .setAlpha(0.8)
-        .setDepth(DEPTH.decal);
-    }
-    const props: [string, number, number][] = [
-      ['outside/0009', 900, 500], ['outside/0010', 3200, 600], ['outside/0011', 1400, 2300],
-      ['outside/0008', 3000, 2200], ['outside/0000', 600, 2000], ['outside/0001', 3500, 1700],
-      ['outside/0017', 1700, 1340], ['outside/0016', 2550, 1900], ['outside/0013', 2100, 900],
-      ['outside/0012', 1900, 1700], ['outside/0003', 500, 800],
-    ];
-    // tree canopies (0006-0011) cover the player; everything else stays on the ground
-    const isCanopy = (frame: string) => /outside\/00(0[6-9]|1[01])$/.test(frame);
-    for (const [frame, x, y] of props) this.add.image(x, y, 'env', frame).setDepth(isCanopy(frame) ? DEPTH.overhead : DEPTH.shadow + 1);
   }
 }

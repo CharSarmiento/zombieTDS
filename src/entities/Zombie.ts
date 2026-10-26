@@ -24,6 +24,8 @@ const TURN_SPEED = 7;
 const ACCEL = 6;
 const BURN_TINT = 0xff8840;
 const CORPSE_MS = 9000;
+/** speed factor while off-screen */
+const CATCH_UP_MULTIPLIER = 2.2;
 
 /** Melee zombie: follows the flow field (or walks straight when it sees the player) and swipes. */
 export class Zombie extends Actor implements Damageable {
@@ -32,7 +34,7 @@ export class Zombie extends Actor implements Damageable {
   state: State = 'chase';
   private attackReadyAt = 0;
   private stateUntil = 0;
-  private speed: number;
+  private baseSpeed: number;
   /** preferred side (±1) to slide around blockers, so the horde spreads both ways */
   private side = Math.random() < 0.5 ? -1 : 1;
   private burnLeft = 0;
@@ -52,7 +54,7 @@ export class Zombie extends Actor implements Damageable {
     this.def = def;
     this.hp = def.hp;
     // a little variety so the horde does not move in lockstep
-    this.speed = def.speed * Phaser.Math.FloatBetween(0.9, 1.1);
+    this.baseSpeed = def.speed * Phaser.Math.FloatBetween(0.9, 1.1);
     this.body.setMass(def.mass).setDamping(true).setDrag(0.01).setCollideWorldBounds(true);
     this.facing = Phaser.Math.Angle.Between(x, y, ctx.player.x, ctx.player.y);
     this.sprite.play({ key: `${kind}/walk`, startFrame: Phaser.Math.Between(0, 8) }).setAlpha(0);
@@ -66,6 +68,10 @@ export class Zombie extends Actor implements Damageable {
 
   get mass(): number {
     return this.def.mass;
+  }
+
+  get speed(): number {
+    return this.alive ? this.body.velocity.length() : 0;
   }
 
   update(dt: number): void {
@@ -125,13 +131,11 @@ export class Zombie extends Actor implements Damageable {
 
   private chase(dt: number, speedOverride: number | null): void {
     const p = this.ctx.player;
-    let dir: Phaser.Math.Vector2 | null;
-    if (this.ctx.field.lineOfSight(this.x, this.y, p.x, p.y)) {
-      dir = new Phaser.Math.Vector2(p.x - this.x, p.y - this.y).normalize();
-    } else {
-      dir = this.ctx.field.direction(this.x, this.y);
-    }
-    const speed = speedOverride ?? this.speed * this.ctx.speedMultiplier();
+    const direct = new Phaser.Math.Vector2(p.x - this.x, p.y - this.y).normalize();
+    // straight at the player when nothing is in between; else follow the field;
+    // never stand still: without a field direction, keep pushing towards the player
+    const dir = this.ctx.field.lineOfSight(this.x, this.y, p.x, p.y) ? direct : (this.ctx.field.direction(this.x, this.y) ?? direct);
+    const speed = speedOverride ?? this.baseSpeed * this.ctx.speedMultiplier() * this.catchUp();
     const desired = new Phaser.Math.Vector2();
     if (dir && speed > 0) {
       // follow the path, but flow around neighbours instead of pushing into them
@@ -143,6 +147,18 @@ export class Zombie extends Actor implements Damageable {
     const moving = this.body.velocity.length();
     if (moving > 10) this.turnTowards(Math.atan2(this.body.velocity.y, this.body.velocity.x), dt);
     this.sprite.anims.timeScale = Phaser.Math.Clamp(moving / ZOMBIE_ANIM_SPEED, 0.3, 1.8);
+  }
+
+  /**
+   * Zombies the player cannot see walk faster, so a fleeing player is never left alone and the
+   * pressure stays on; on screen they move at their normal pace, so the boost goes unnoticed.
+   */
+  private catchUp(): number {
+    const view = this.scene.cameras.main.worldView;
+    const margin = 80;
+    const onScreen =
+      this.x > view.left - margin && this.x < view.right + margin && this.y > view.top - margin && this.y < view.bottom + margin;
+    return onScreen ? 1 : CATCH_UP_MULTIPLIER;
   }
 
   private startAttack(): void {

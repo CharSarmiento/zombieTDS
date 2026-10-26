@@ -18,10 +18,22 @@ npm run dev        # http://localhost:5173
 | Script | What it does |
 |---|---|
 | `npm run assets` | Builds the texture atlases from `assets/` (`npm run assets -- man zombies` rebuilds only those groups) |
+| `npm run maps` | Generates missing level maps (`public/maps/*.json`) from `tools/build-maps.mjs`; `-- --force` overwrites |
 | `npm run dev` | Development server |
 | `npm run build` | Type-check + production build into `dist/` |
 
-Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; `&demo=rifle` (any weapon id) makes the player invulnerable and auto-fires at the nearest zombie; `&horde=60` spawns that many zombies at once; `&god=1` makes the player invulnerable; in game F1 shows hitboxes, F2 refills ammo and F3 spawns 10 zombies; F9 on character select opens the animation preview.
+## Editing levels in Tiled
+
+Maps are regular Tiled JSON files: open `public/maps/level01.json` in [Tiled](https://www.mapeditor.org/) (after `npm run assets`, which creates the tilesets it uses).
+
+- **ground** (tile layer): paint with the `ground` tileset.
+- **props** (object layer): insert tiles from the `props` collection: walls, furniture, cars, trees, barrels. Collision, depth and shadows come from the frame (`src/data/props.ts`), so moving or rotating a prop moves its collision too. Rotations in multiples of 90° give exact wall collisions.
+- **decals** (object layer): flat details without collision.
+- **markers** (object layer): a point named `player` (start), points named `spawn` (zombie spawns), a rectangle named `exit`.
+
+Once a map has been edited by hand, `npm run maps` leaves it alone (unless `--force`).
+
+Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; `&demo=rifle` (any weapon id) makes the player invulnerable and auto-fires at the nearest zombie; `&horde=60` spawns that many zombies at once; `&god=1` makes the player invulnerable; `&zoom=0.4` zooms out; `&at=1000,700` places the player; in game F1 shows hitboxes, F2 refills ammo and F3 spawns 10 zombies; F9 on character select opens the animation preview.
 
 ## Controls
 
@@ -42,7 +54,7 @@ Dev shortcuts: `?scene=Game` in the URL jumps straight to a scene; `&demo=rifle`
 - [x] M2 · Player: movement, aiming, camera, keyboard/mouse + gamepad
 - [x] M3 · Weapons: knife, pistol, bat, rifle, flamethrower
 - [x] M4 · Zombies (tiers 1–2), flow-field AI
-- [ ] M5 · Levels (Tiled maps, walls, cover, explosive barrels)
+- [x] M5 · Levels (Tiled maps, walls, cover, explosive barrels)
 - [ ] M6 · Level loop: waves, objectives, pickups, HUD
 - [ ] M7 · Meta: menus, character select, level map, shop, skills, save
 - [ ] M8 · Elites and bosses

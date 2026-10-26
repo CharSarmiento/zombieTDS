@@ -39,6 +39,12 @@ export class FlowField {
     this.dirty = true;
   }
 
+  /** Unblocks everything (callers then re-block what still stands). */
+  clear(): void {
+    this.blocked.fill(0);
+    this.dirty = true;
+  }
+
   isBlockedAt(x: number, y: number): boolean {
     const i = this.indexAt(x, y);
     return i < 0 || this.blocked[i] === 1;
@@ -69,10 +75,14 @@ export class FlowField {
     return new Phaser.Math.Vector2((bc + 0.5) * this.cell - x, (br + 0.5) * this.cell - y).normalize();
   }
 
-  /** True if the straight segment crosses no blocked cell (grid DDA). */
+  /**
+   * True if the straight segment crosses no blocked cell (grid DDA). The start and end cells are
+   * ignored: either end may stand in an inflated cell right next to an obstacle.
+   */
   lineOfSight(x0: number, y0: number, x1: number, y1: number): boolean {
     let c = Math.floor(x0 / this.cell), r = Math.floor(y0 / this.cell);
     const c1 = Math.floor(x1 / this.cell), r1 = Math.floor(y1 / this.cell);
+    const c0 = c, r0 = r;
     const dx = x1 - x0, dy = y1 - y0;
     const stepC = Math.sign(dx), stepR = Math.sign(dy);
     const tDeltaC = dx ? Math.abs(this.cell / dx) : Infinity;
@@ -80,8 +90,8 @@ export class FlowField {
     let tMaxC = dx ? ((stepC > 0 ? (c + 1) * this.cell - x0 : x0 - c * this.cell) / Math.abs(dx)) : Infinity;
     let tMaxR = dy ? ((stepR > 0 ? (r + 1) * this.cell - y0 : y0 - r * this.cell) / Math.abs(dy)) : Infinity;
     for (let guard = 0; guard < this.cols + this.rows; guard++) {
-      if (!this.walkable(c, r)) return false;
       if (c === c1 && r === r1) return true;
+      if (!(c === c0 && r === r0) && !this.walkable(c, r)) return false;
       if (tMaxC < tMaxR) { tMaxC += tDeltaC; c += stepC; }
       else { tMaxR += tDeltaR; r += stepR; }
     }
@@ -90,9 +100,11 @@ export class FlowField {
 
   private compute(target: number): void {
     this.dist.fill(UNREACHABLE);
-    this.dist[target] = 0;
+    // The target may stand in a blocked cell (cells are inflated around obstacles and the player
+    // can hug furniture). Seeding from it would reach nothing, so seed from the nearest free cells.
+    const queue: number[] = this.blocked[target] ? this.nearestFree(target) : [target];
+    for (const s of queue) this.dist[s] = 0;
     // queue-based relaxation (SPFA) with costs 10/14: simple and plenty fast for these small grids
-    const queue: number[] = [target];
     let head = 0;
     while (head < queue.length) {
       const i = queue[head++];
@@ -110,6 +122,21 @@ export class FlowField {
         }
       }
     }
+  }
+
+  /** Walkable cells on the smallest ring around `i` that has any. */
+  private nearestFree(i: number): number[] {
+    const c0 = i % this.cols, r0 = (i / this.cols) | 0;
+    for (let ring = 1; ring < Math.max(this.cols, this.rows); ring++) {
+      const found: number[] = [];
+      for (let r = r0 - ring; r <= r0 + ring; r++)
+        for (let c = c0 - ring; c <= c0 + ring; c++) {
+          if (Math.max(Math.abs(c - c0), Math.abs(r - r0)) !== ring) continue;
+          if (this.walkable(c, r)) found.push(r * this.cols + c);
+        }
+      if (found.length) return found;
+    }
+    return [i];
   }
 
   private walkable(c: number, r: number): boolean {
